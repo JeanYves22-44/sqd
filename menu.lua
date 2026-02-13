@@ -1,13 +1,3 @@
-local LibraryURL = "https://raw.githubusercontent.com/kebabmacho-cyber/Lua-FiveM-Menu/refs/heads/main/bnz.lua"
-
--- Vérifier que Susano existe et que HttpGet est disponible
-if not Susano or type(Susano) ~= "table" or type(Susano.HttpGet) ~= "function" then
-    print("Error: Susano.HttpGet is not available")
-    return
-end
-
-local status, LibraryCode = Susano.HttpGet(LibraryURL)
-
 if status ~= 200 then
     return
 end
