@@ -286,11 +286,40 @@ CreateThread(function()
 end)
 
 -- ============================================
+-- KEYBIND - Touche G pour ouvrir/fermer le menu
+-- ============================================
+
+-- Touche G = 47 (voir les codes en bas)
+local MENU_TOGGLE_KEY = 47 -- G
+
+CreateThread(function()
+    print("^5[Menu]^0 Keybind system initialized - Press G to toggle menu")
+    
+    while true do
+        Wait(0)
+        
+        -- Détecter si G est pressé
+        if IsControlJustPressed(0, MENU_TOGGLE_KEY) then
+            Menu.Visible = not Menu.Visible
+            
+            if Menu.Visible then
+                print("^2[Menu]^0 Menu opened (G pressed)")
+            else
+                print("^3[Menu]^0 Menu closed (G pressed)")
+            end
+        end
+    end
+end)
+
+-- ============================================
 -- RENDER LOOP PRINCIPAL
 -- ============================================
 
 Menu.OnRender = function()
     -- À exécuter chaque frame
+    if Menu.Visible then
+        -- Le menu est visible, on peut afficher les éléments
+    end
 end
 
 -- ============================================
@@ -298,5 +327,6 @@ end
 -- ============================================
 
 print("^2[Menu]^0 Menu loaded successfully!")
+print("^5[Menu]^0 Press G to toggle the menu")
 
 return Menu
