@@ -1,4 +1,4 @@
--- GENGAR MENU v2 - CODE NOBLAZ + BYPASS GITHUB
+-- GENGAR MENU v2 - CODE NOBLAZ + ENEKO COMPLET
 
 -- [1. VARIABLES ET ÉTATS]
 local menuOpen = false
@@ -10,9 +10,15 @@ local currentMenu = "MAIN"
 
 local selectedPlayer = nil
 local attachedPlayers = {}
+local originalCoords = {}
 local fullGodModeActive = false
 local semiGodModeActive = false
-local putinBypassed = false
+local forceEngineActive = false
+local shiftBoostActive = false
+local blackHoleActive = false
+local rampVehicleActive = false
+local easyHandlingActive = false
+local rampVehiclesAttached = {}
 
 -- Variables pour le défilement continu
 local lastNavTime = 0
@@ -26,7 +32,7 @@ local KEY_BACK = 194     -- BACKSPACE
 local KEY_UP = 172       -- Flèche HAUT
 local KEY_DOWN = 173     -- Flèche BAS
 local KEY_REVIVE = 73    -- X (pour se relever)
-local AK_DIST = 0.75
+local AK_DIST = 1.0
 
 -- [3. CONFIGURATION DU MENU]
 local mainOptions = {
@@ -51,8 +57,10 @@ local combatOptions = {
 
 local vehicleOptions = {
     "Fix Vehicle",
+    "Ramp Vehicle",
     "Easy Handling",
-    "Ramp Vehicle"
+    "Force Engine",
+    "Shift Boost"
 }
 
 local miscOptions = {
@@ -394,44 +402,7 @@ local function ToggleSemiGodmode(enable)
     end
 end
 
--- [8. BYPASS PUTIN - CHARGÉ DEPUIS GITHUB]
-local function BypassPutin()
-    if type(Susano) ~= "table" or type(Susano.HttpGet) ~= "function" then
-        ShowDynastyNotification("~r~Error: Susano.HttpGet not available")
-        return
-    end
-
-    if putinBypassed then
-        ShowDynastyNotification("~y~Putin already bypassed!")
-        return
-    end
-
-    ShowDynastyNotification("~y~Loading bypass from GitHub...")
-
-    CreateThread(function()
-        local bypassURL = "https://raw.githubusercontent.com/JeanYves22-44/sqd/main/bypass.lua"
-        local status, bypassCode = Susano.HttpGet(bypassURL)
-
-        if status ~= 200 or not bypassCode then
-            ShowDynastyNotification("~r~Failed to load bypass (HTTP " .. tostring(status) .. ")")
-            return
-        end
-
-        -- Exécute le code du bypass
-        local success, err = pcall(function()
-            load(bypassCode)()
-        end)
-
-        if success then
-            putinBypassed = true
-            ShowDynastyNotification("~g~Putin bypassed! (from GitHub)")
-        else
-            ShowDynastyNotification("~r~Bypass error: " .. tostring(err))
-        end
-    end)
-end
-
--- [9. FONCTIONS PLAYER]
+-- [8. FONCTIONS PLAYER]
 local function HealPlayer()
     local ped = PlayerPedId()
     local maxHealth = GetEntityMaxHealth(ped)
@@ -445,20 +416,631 @@ local function CleanPed()
     ShowDynastyNotification("Ped Cleaned")
 end
 
--- [10. FONCTIONS TROLL/ONLINE]
-local function ToggleAttachPlayer()
-    if not selectedPlayer then return end
-
-    if attachedPlayers[selectedPlayer.id] then
-        attachedPlayers[selectedPlayer.id] = nil
-        ShowDynastyNotification("Player detached")
+-- [9. FONCTIONS VEHICLE]
+local function FixVehicle()
+    local ped = PlayerPedId()
+    if IsPedInAnyVehicle(ped, false) then
+        local veh = GetVehiclePedIsIn(ped, false)
+        SetVehicleFixed(veh)
+        SetVehicleDeformationFixed(veh)
+        SetVehicleUndriveable(veh, false)
+        SetVehicleEngineOn(veh, true, true, false)
+        ShowDynastyNotification("Vehicle Fixed")
     else
-        attachedPlayers[selectedPlayer.id] = GetPlayerPed(selectedPlayer.id)
-        ShowDynastyNotification("Player attached")
+        ShowDynastyNotification("~r~Not in vehicle")
     end
 end
 
--- [11. RENDU DU MENU]
+-- [9.1 RAMP VEHICLE - CODE D'ENEKO]
+local function ToggleRampVehicle()
+    rampVehicleActive = not rampVehicleActive
+
+    if not rampVehicleActive then
+        for _, veh in ipairs(rampVehiclesAttached) do
+            if DoesEntityExist(veh) then
+                DetachEntity(veh, true, true)
+            end
+        end
+        rampVehiclesAttached = {}
+        ShowDynastyNotification("Ramp Vehicle: ~r~OFF")
+        return
+    end
+
+    CreateThread(function()
+        local playerPed = PlayerPedId()
+        if not IsPedInAnyVehicle(playerPed, false) then
+            rampVehicleActive = false
+            ShowDynastyNotification("~r~Not in vehicle")
+            return
+        end
+
+        local myVehicle = GetVehiclePedIsIn(playerPed, false)
+        if not DoesEntityExist(myVehicle) or GetPedInVehicleSeat(myVehicle, -1) ~= playerPed then
+            rampVehicleActive = false
+            ShowDynastyNotification("~r~Not driver")
+            return
+        end
+
+        local myCoords = GetEntityCoords(myVehicle)
+        local vehicles = {}
+        local searchRadius = 100.0
+        local vehHandle, veh = FindFirstVehicle()
+        local success
+
+        repeat
+            local vehCoords = GetEntityCoords(veh)
+            local distance = #(myCoords - vehCoords)
+            local vehClass = GetVehicleClass(veh)
+            if distance <= searchRadius and veh ~= myVehicle and vehClass ~= 8 and vehClass ~= 13 then
+                table.insert(vehicles, {handle = veh, distance = distance})
+            end
+            success, veh = FindNextVehicle(vehHandle)
+        until not success
+        EndFindVehicle(vehHandle)
+
+        if #vehicles < 3 then
+            rampVehicleActive = false
+            ShowDynastyNotification("~r~Not enough vehicles nearby")
+            return
+        end
+
+        table.sort(vehicles, function(a, b) return a.distance < b.distance end)
+        local selectedVehicles = {vehicles[1].handle, vehicles[2].handle, vehicles[3].handle}
+
+        local function takeControl(veh)
+            SetPedIntoVehicle(playerPed, veh, -1)
+            Wait(150)
+            SetEntityAsMissionEntity(veh, true, true)
+            if NetworkGetEntityIsNetworked(veh) then
+                NetworkRequestControlOfEntity(veh)
+                local timeout = 0
+                while not NetworkHasControlOfEntity(veh) and timeout < 50 do
+                    NetworkRequestControlOfEntity(veh)
+                    Wait(10)
+                    timeout = timeout + 1
+                end
+            end
+        end
+
+        for i = 1, 3 do
+            if DoesEntityExist(selectedVehicles[i]) then
+                takeControl(selectedVehicles[i])
+            end
+        end
+
+        SetPedIntoVehicle(playerPed, myVehicle, -1)
+        Wait(100)
+
+        local rampPositions = {
+            {offsetX = -2.0, offsetY = 2.5, offsetZ = 0.2, rotX = 160.0, rotY = 0.0, rotZ = 0.0},
+            {offsetX = 0.0,  offsetY = 2.5, offsetZ = 0.2, rotX = 160.0, rotY = 0.0, rotZ = 0.0},
+            {offsetX = 2.0,  offsetY = 2.5, offsetZ = 0.2, rotX = 160.0, rotY = 0.0, rotZ = 0.0},
+        }
+
+        rampVehiclesAttached = {}
+        for i = 1, 3 do
+            if DoesEntityExist(selectedVehicles[i]) then
+                local pos = rampPositions[i]
+                AttachEntityToEntity(selectedVehicles[i], myVehicle, 0, pos.offsetX, pos.offsetY, pos.offsetZ, pos.rotX, pos.rotY, pos.rotZ, false, false, true, false, 2, true)
+                table.insert(rampVehiclesAttached, selectedVehicles[i])
+            end
+        end
+
+        ShowDynastyNotification("Ramp Vehicle: ~g~ON ~w~(3 vehicles)")
+    end)
+end
+
+-- [9.2 EASY HANDLING - CODE D'ENEKO]
+local function ToggleEasyHandling()
+    easyHandlingActive = not easyHandlingActive
+
+    if easyHandlingActive then
+        CreateThread(function()
+            while easyHandlingActive do
+                Wait(0)
+                local ped = PlayerPedId()
+                if ped and ped ~= 0 then
+                    local veh = GetVehiclePedIsIn(ped, false)
+                    if veh and veh ~= 0 then
+                        SetVehicleGravityAmount(veh, 73.0)
+                        SetVehicleStrong(veh, true)
+                    end
+                end
+            end
+
+            -- Réinitialisation quand désactivé
+            local ped = PlayerPedId()
+            if ped and ped ~= 0 then
+                local veh = GetVehiclePedIsIn(ped, false)
+                if veh and veh ~= 0 then
+                    SetVehicleGravityAmount(veh, 9.8)
+                    SetVehicleStrong(veh, false)
+                end
+            end
+        end)
+        ShowDynastyNotification("Easy Handling: ~g~ON")
+    else
+        ShowDynastyNotification("Easy Handling: ~r~OFF")
+    end
+end
+
+local function ToggleForceVehicleEngine(enable)
+    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+        Susano.InjectResource("any", string.format([[
+            local susano = rawget(_G, "Susano")
+
+            if susano and type(susano) == "table" and type(susano.HookNative) == "function" and not _force_engine_hooks_applied then
+                _force_engine_hooks_applied = true
+
+                susano.HookNative(0x8DE82BC774F3B862, function(entity)
+                    return true
+                end)
+
+                susano.HookNative(0x4CEBC1ED31E8925E, function(entity)
+                    return true
+                end)
+
+                susano.HookNative(0xAE3CBE5BF394C9C9, function(entity)
+                    return true
+                end)
+
+                susano.HookNative(0x2B40A976, function(entity)
+                    return true
+                end)
+
+                susano.HookNative(0xAD738C3085FE7E11, function(entity, p1, p2)
+                    return true
+                end)
+            end
+
+            _G.ForceVehicleEngineEnabled = %s
+
+            if _G.ForceVehicleEngineThread then
+            end
+
+            _G.ForceVehicleEngineThread = CreateThread(function()
+                while _G.ForceVehicleEngineEnabled do
+                    Wait(0)
+
+                    local ped = PlayerPedId()
+                    local vehicle = GetVehiclePedIsIn(ped, false)
+
+                    if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+                        if not NetworkHasControlOfEntity(vehicle) then
+                            NetworkRequestControlOfEntity(vehicle)
+                        end
+
+                        SetVehicleEngineOn(vehicle, true, true, false)
+                        SetVehicleEngineHealth(vehicle, 1000.0)
+                        SetVehicleUndriveable(vehicle, false)
+                    end
+                end
+
+                _G.ForceVehicleEngineThread = nil
+            end)
+        ]], tostring(enable)))
+
+        forceEngineActive = enable
+        if enable then
+            ShowDynastyNotification("Force Engine: ~g~ON")
+        else
+            ShowDynastyNotification("Force Engine: ~r~OFF")
+        end
+    else
+        ShowDynastyNotification("~r~Susano not available")
+    end
+end
+
+local function ToggleShiftBoost(enable)
+    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+        Susano.InjectResource("any", string.format([[
+            if QwErTyUiOpSh == nil then QwErTyUiOpSh = false end
+            QwErTyUiOpSh = %s
+
+            if QwErTyUiOpSh then
+                local function ZxCvBnMmLl()
+                    CreateThread(function()
+                        while QwErTyUiOpSh and not Unloaded do
+                            local ped = PlayerPedId()
+                            if IsPedInAnyVehicle(ped, false) then
+                                local veh = GetVehiclePedIsIn(ped, false)
+                                if veh ~= 0 and IsDisabledControlJustPressed(0, 21) then
+                                    SetVehicleForwardSpeed(veh, 150.0)
+                                end
+                            end
+                            Wait(0)
+                        end
+                    end)
+                end
+                ZxCvBnMmLl()
+            end
+        ]], tostring(enable)))
+
+        shiftBoostActive = enable
+        if enable then
+            ShowDynastyNotification("Shift Boost: ~g~ON ~w~(SHIFT)")
+        else
+            ShowDynastyNotification("Shift Boost: ~r~OFF")
+        end
+    else
+        ShowDynastyNotification("~r~Susano not available")
+    end
+end
+
+-- [10. FONCTIONS TROLL/ONLINE - CODE D'ENEKO]
+
+-- [10.1 ATTACH PLAYER - CODE D'ENEKO AVEC DETACH]
+local function isPlayerAttached(id)
+    if not id then return false end
+    if attachedPlayers[id] and DoesEntityExist(attachedPlayers[id]) then
+        return true
+    else
+        if attachedPlayers[id] then
+            attachedPlayers[id] = nil
+            originalCoords[id] = nil
+        end
+        return false
+    end
+end
+
+local function DetachPlayer(id)
+    if not id then return end
+
+    if attachedPlayers[id] then
+        local ped = attachedPlayers[id]
+        if DoesEntityExist(ped) and originalCoords[id] then
+            local success = pcall(function()
+                SetEntityCoords(ped, originalCoords[id].x, originalCoords[id].y, originalCoords[id].z, false, false, false, true)
+            end)
+            if not success then
+                local myCoords = GetEntityCoords(PlayerPedId())
+                SetEntityCoords(ped, myCoords.x, myCoords.y, myCoords.z + 2.0, false, false, false, true)
+            end
+        end
+    end
+
+    attachedPlayers[id] = nil 
+    originalCoords[id] = nil
+    ShowDynastyNotification("Player detached")
+end
+
+local function AttachPlayerToMe(id)
+    if not id then return end
+
+    local ped = GetPlayerPed(id)
+    if DoesEntityExist(ped) then
+        if attachedPlayers[id] then
+            DetachPlayer(id)
+        else
+            local coords = GetEntityCoords(ped)
+            if coords and coords.x and coords.y and coords.z then
+                attachedPlayers[id] = ped
+                originalCoords[id] = coords
+                ShowDynastyNotification("Player attached")
+            end
+        end
+    end
+end
+
+local function ToggleAttachPlayer()
+    if not selectedPlayer then return end
+
+    if isPlayerAttached(selectedPlayer.id) then
+        DetachPlayer(selectedPlayer.id)
+    else
+        AttachPlayerToMe(selectedPlayer.id)
+    end
+end
+
+-- [10.2 BLACK HOLE - CODE D'ENEKO]
+local function ToggleBlackHole()
+    blackHoleActive = not blackHoleActive
+
+    if not blackHoleActive then
+        if _G.black_hole_active then
+            _G.black_hole_active = false
+            _G.black_hole_vehicles = {}
+            _G.black_hole_target_player = nil
+        end
+        ShowDynastyNotification("Black Hole: ~r~OFF")
+        return
+    end
+
+    if not selectedPlayer then
+        blackHoleActive = false
+        ShowDynastyNotification("~r~No player selected")
+        return
+    end
+
+    local targetPlayerId = selectedPlayer.id
+    local targetPed = GetPlayerPed(targetPlayerId)
+
+    if not DoesEntityExist(targetPed) then
+        blackHoleActive = false
+        ShowDynastyNotification("~r~Target not found")
+        return
+    end
+
+    CreateThread(function()
+        if not _G.black_hole_active then
+            _G.black_hole_active = true
+            _G.black_hole_vehicles = {}
+            _G.black_hole_target_player = targetPlayerId
+
+            local playerPed = PlayerPedId()
+            local myCoords = GetEntityCoords(playerPed)
+            local myHeading = GetEntityHeading(playerPed)
+
+            local blackHoleCam = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
+            local camCoords = GetGameplayCamCoord()
+            local camRot = GetGameplayCamRot(2)
+            SetCamCoord(blackHoleCam, camCoords.x, camCoords.y, camCoords.z)
+            SetCamRot(blackHoleCam, camRot.x, camRot.y, camRot.z, 2)
+            SetCamFov(blackHoleCam, GetGameplayCamFov())
+            SetCamActive(blackHoleCam, true)
+            RenderScriptCams(true, false, 0, true, true)
+
+            local playerModel = GetEntityModel(playerPed)
+            RequestModel(playerModel)
+            local timeout = 0
+            while not HasModelLoaded(playerModel) and timeout < 50 do
+                Wait(50)
+                timeout = timeout + 1
+            end
+
+            local groundZ = myCoords.z
+            local rayHandle = StartShapeTestRay(myCoords.x, myCoords.y, myCoords.z + 2.0, myCoords.x, myCoords.y, myCoords.z - 100.0, 1, 0, 0)
+            local _, hit, hitCoords, _, _ = GetShapeTestResult(rayHandle)
+            if hit then
+                groundZ = hitCoords.z
+            end
+
+            local clonePed = CreatePed(4, playerModel, myCoords.x, myCoords.y, groundZ, myHeading, false, false)
+            SetEntityCollision(clonePed, false, false)
+            FreezeEntityPosition(clonePed, true)
+            SetEntityInvincible(clonePed, true)
+            SetBlockingOfNonTemporaryEvents(clonePed, true)
+            SetPedCanRagdoll(clonePed, false)
+            ClonePedToTarget(playerPed, clonePed)
+            SetEntityVisible(playerPed, false, false)
+
+            local emptyVehicles = {}
+            local searchRadius = 1000.0
+            local vehHandle, veh = FindFirstVehicle()
+            local success
+
+            repeat
+                local vehCoords = GetEntityCoords(veh)
+                local distance = #(myCoords - vehCoords)
+                local vehClass = GetVehicleClass(veh)
+                local driver = GetPedInVehicleSeat(veh, -1)
+                local isEmpty = (driver == 0 or not DoesEntityExist(driver))
+
+                if distance <= searchRadius and veh ~= GetVehiclePedIsIn(playerPed, false) and vehClass ~= 8 and vehClass ~= 13 and isEmpty then
+                    table.insert(emptyVehicles, {handle = veh, distance = distance})
+                end
+
+                success, veh = FindNextVehicle(vehHandle)
+            until not success
+
+            EndFindVehicle(vehHandle)
+
+            if #emptyVehicles == 0 then
+                SetEntityVisible(playerPed, true, false)
+                SetCamActive(blackHoleCam, false)
+                RenderScriptCams(false, false, 0, true, true)
+                DestroyCam(blackHoleCam, true)
+                if DoesEntityExist(clonePed) then
+                    DeleteEntity(clonePed)
+                end
+                SetModelAsNoLongerNeeded(playerModel)
+                _G.black_hole_active = false
+                blackHoleActive = false
+                ShowDynastyNotification("~r~No vehicles found")
+                return
+            end
+
+            table.sort(emptyVehicles, function(a, b) return a.distance < b.distance end)
+            while #emptyVehicles > 6 do
+                table.remove(emptyVehicles)
+            end
+
+            for i, vehData in ipairs(emptyVehicles) do
+                local veh = vehData.handle
+                if DoesEntityExist(veh) and _G.black_hole_active then
+                    SetPedIntoVehicle(playerPed, veh, -1)
+                    Wait(150)
+
+                    SetEntityAsMissionEntity(veh, true, true)
+                    if NetworkGetEntityIsNetworked(veh) then
+                        NetworkRequestControlOfEntity(veh)
+                        local timeout = 0
+                        while not NetworkHasControlOfEntity(veh) and timeout < 50 do
+                            NetworkRequestControlOfEntity(veh)
+                            Wait(10)
+                            timeout = timeout + 1
+                        end
+                    end
+
+                    SetEntityCoordsNoOffset(playerPed, myCoords.x, myCoords.y, myCoords.z, false, false, false)
+                    SetEntityHeading(playerPed, myHeading)
+
+                    local targetCoords = GetEntityCoords(targetPed)
+                    local angle = math.atan2(targetCoords.y - myCoords.y, targetCoords.x - myCoords.x)
+                    local spawnX = targetCoords.x - math.cos(angle) * 50.0
+                    local spawnY = targetCoords.y - math.sin(angle) * 50.0
+                    local spawnZ = targetCoords.z
+
+                    SetEntityCoordsNoOffset(veh, spawnX, spawnY, spawnZ, false, false, false)
+                    SetEntityHeading(veh, math.deg(angle))
+                    SetEntityVelocity(veh, math.cos(angle) * 50.0, math.sin(angle) * 50.0, 0.0)
+
+                    table.insert(_G.black_hole_vehicles, veh)
+                end
+            end
+
+            SetEntityVisible(playerPed, true, false)
+            SetCamActive(blackHoleCam, false)
+            RenderScriptCams(false, false, 0, true, true)
+            DestroyCam(blackHoleCam, true)
+            if DoesEntityExist(clonePed) then
+                DeleteEntity(clonePed)
+            end
+            SetModelAsNoLongerNeeded(playerModel)
+
+            ShowDynastyNotification("Black Hole: ~g~ON ~w~(" .. #_G.black_hole_vehicles .. " vehicles)")
+
+            CreateThread(function()
+                while _G.black_hole_active and blackHoleActive do
+                    Wait(0)
+                    local targetPed = GetPlayerPed(_G.black_hole_target_player)
+                    if DoesEntityExist(targetPed) then
+                        local targetCoords = GetEntityCoords(targetPed)
+                        for _, veh in ipairs(_G.black_hole_vehicles) do
+                            if DoesEntityExist(veh) then
+                                local vehCoords = GetEntityCoords(veh)
+                                local direction = vector3(targetCoords.x - vehCoords.x, targetCoords.y - vehCoords.y, targetCoords.z - vehCoords.z)
+                                local distance = #direction
+                                if distance > 0.1 then
+                                    direction = direction / distance
+                                    SetEntityVelocity(veh, direction.x * 30.0, direction.y * 30.0, direction.z * 5.0)
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- [11. FONCTIONS MISCELLANEOUS]
+local function BypassPutin()
+    if type(Susano) ~= "table" or type(Susano.InjectResource) ~= "function" then
+        ShowDynastyNotification("~r~Error: Susano not available")
+        return
+    end
+
+    local targetResource = "Putin"
+
+    if not targetResource or GetResourceState(targetResource) ~= "started" then
+        ShowDynastyNotification("~r~Putin resource not found")
+        return
+    end
+
+    CreateThread(function()
+        Susano.InjectResource(targetResource, [[
+            local p = print
+            local w = warn
+            local e = error
+            p = function() end
+            w = function() end
+            e = function() end
+
+            if Citizen then
+                local t = Citizen.Trace
+                Citizen.Trace = function(m)
+                    if m and type(m) == "string" then
+                        local l = string.lower(m)
+                        if string.find(l, "debug") or string.find(l, "detect") or 
+                           string.find(l, "violation") or string.find(l, "cheat") or
+                           string.find(l, "inject") or string.find(l, "hook") or
+                           string.find(l, "susano") or string.find(l, "bypass") or
+                           string.find(l, "ac:") or string.find(l, "anticheat") or
+                           string.find(l, "ban") or string.find(l, "kick") or
+                           string.find(l, "log") or string.find(l, "report") then
+                            return
+                        end
+                    end
+                    if t then t(m) end
+                end
+            end
+
+            local ts = TriggerServerEvent
+            local te = TriggerEvent
+
+            if TriggerServerEvent then
+                TriggerServerEvent = function(n, ...)
+                    if n and type(n) == "string" then
+                        local l = string.lower(n)
+                        if string.find(l, "detect") or string.find(l, "violation") or
+                           string.find(l, "cheat") or string.find(l, "ban") or
+                           string.find(l, "kick") or string.find(l, "log") or
+                           string.find(l, "report") or string.find(l, "ac:") then
+                            return
+                        end
+                    end
+                    if ts then return ts(n, ...) end
+                end
+            end
+
+            if TriggerEvent then
+                TriggerEvent = function(n, ...)
+                    if n and type(n) == "string" then
+                        local l = string.lower(n)
+                        if string.find(l, "detect") or string.find(l, "violation") or
+                           string.find(l, "cheat") or string.find(l, "ac:") then
+                            return
+                        end
+                    end
+                    if te then return te(n, ...) end
+                end
+            end
+        ]])
+
+        Wait(50)
+
+        Susano.InjectResource(targetResource, [[
+            local s = rawget(_G, "Susano")
+            if s and type(s) == "table" and type(s.HookNative) == "function" then
+                s.HookNative(0x2B40A976, function() return 0 end)
+                s.HookNative(0x5324A0E3E4CE3570, function() return false end)
+                s.HookNative(0x8DE82BC774F3B862, function() return nil end)
+                s.HookNative(0x2B1813BA58063D36, function() return "core" end)
+
+                s.HookNative(0xFAEE099C6F890BB8, function(entity)
+                    local playerPed = PlayerPedId()
+                    if entity == playerPed then
+                        return false, false, false, false, false, false, false, false
+                    end
+                    return true
+                end)
+            end
+        ]])
+
+        Wait(50)
+
+        Susano.InjectResource("Putin", [[
+            _zeubiiii = TriggerServerEvent
+            _zouzzie = GetStateBagValue
+
+            GetEntityScript = nil
+            IsEntityGhostedToLocalPlayer = nil
+
+            TriggerServerEvent = function(eventName, ...)
+                if eventName:find('PutinAC') then
+                    return
+                end
+                return _zeubiiii(eventName, ...)
+            end
+
+            GetInvokingResource = function()
+                return nil
+            end
+
+            GetStateBagValue = function(bag, key)
+                if key == 'doCheckPlayerPed' then
+                    return false
+                end
+                return _zouzzie(bag, key)
+            end
+        ]])
+
+        ShowDynastyNotification("~g~Putin bypassed successfully!")
+    end)
+end
+
+-- [12. RENDU DU MENU]
 local function RenderMenu()
     if not menuOpen and menuAlpha <= 0 then return end
 
@@ -471,14 +1053,18 @@ local function RenderMenu()
     local startY = baseY + 0.075 + (optionHeight / 2)
 
     DrawRect(baseX, baseY, menuWidth, 0.15, 0, 0, 0, 255)
-    DrawSprite("gengar_menu", "logo", baseX, baseY - 0.02, 0.08, 0.12, 0.0, 255, 255, 255, math.floor(menuAlpha))
 
     local title = "Main Menu"
     if currentMenu == "PLAYER" then title = "Player"
     elseif currentMenu == "ONLINE" then 
         local nearbyPlayers = getNearbyPlayers()
         title = string.format("Online (~g~%d~w~ players)", #nearbyPlayers)
-    elseif currentMenu == "TROLL" then title = "Troll Menu"
+    elseif currentMenu == "TROLL" then 
+        if selectedPlayer then
+            title = string.format("Troll: %s", selectedPlayer.name)
+        else
+            title = "Troll Menu"
+        end
     elseif currentMenu == "COMBAT" then title = "Combat"
     elseif currentMenu == "VEHICLE" then title = "Vehicle"
     elseif currentMenu == "MISC" then title = "Miscellaneous"
@@ -517,13 +1103,21 @@ local function RenderMenu()
                 label = "Full God Mode " .. (fullGodModeActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "PLAYER" and index == 2 then
                 label = "Semi God Mode " .. (semiGodModeActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "MISC" and index == 1 then
-                label = "Bypass Putin " .. (putinBypassed and "~g~[BYPASSED]" or "")
+            elseif currentMenu == "VEHICLE" and index == 2 then
+                label = "Ramp Vehicle " .. (rampVehicleActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "VEHICLE" and index == 3 then
+                label = "Easy Handling " .. (easyHandlingActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "VEHICLE" and index == 4 then
+                label = "Force Engine " .. (forceEngineActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "VEHICLE" and index == 5 then
+                label = "Shift Boost " .. (shiftBoostActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "TROLL" and index == 2 then
+                local isAttached = selectedPlayer and isPlayerAttached(selectedPlayer.id)
+                label = "Attach Player " .. (isAttached and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "TROLL" and index == 3 then
+                label = "Black Hole " .. (blackHoleActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "ONLINE" then
                 label = string.format("[%d] %s (%dm)", data.serverId, data.name, data.dist)
-            elseif currentMenu == "TROLL" and index == 2 then
-                local isAttached = selectedPlayer and attachedPlayers[selectedPlayer.id]
-                label = "Attach Player " .. (isAttached and "~g~[ON]" or "~r~[OFF]")
             else
                 label = (type(data) == "table" and data.name or data)
             end
@@ -533,7 +1127,7 @@ local function RenderMenu()
     end
 end
 
--- [12. GESTION DES ACTIONS DU MENU]
+-- [13. GESTION DES ACTIONS DU MENU]
 local function HandleMenuSelection()
     if currentMenu == "MAIN" then
         local choice = mainOptions[selectedOption]
@@ -565,6 +1159,19 @@ local function HandleMenuSelection()
             CleanPed()
         end
 
+    elseif currentMenu == "VEHICLE" then
+        if selectedOption == 1 then
+            FixVehicle()
+        elseif selectedOption == 2 then
+            ToggleRampVehicle()
+        elseif selectedOption == 3 then
+            ToggleEasyHandling()
+        elseif selectedOption == 4 then
+            ToggleForceVehicleEngine(not forceEngineActive)
+        elseif selectedOption == 5 then
+            ToggleShiftBoost(not shiftBoostActive)
+        end
+
     elseif currentMenu == "ONLINE" then
         local list = getNearbyPlayers()
         selectedPlayer = list[selectedOption]
@@ -577,8 +1184,16 @@ local function HandleMenuSelection()
         end
 
     elseif currentMenu == "TROLL" then
-        if selectedOption == 2 then
+        if selectedOption == 1 then
+            ShowDynastyNotification("~y~Launch Player (not coded)")
+        elseif selectedOption == 2 then
             ToggleAttachPlayer()
+        elseif selectedOption == 3 then
+            ToggleBlackHole()
+        elseif selectedOption == 4 then
+            ShowDynastyNotification("~y~Steal Outfit (not coded)")
+        elseif selectedOption == 5 then
+            ShowDynastyNotification("~y~Spectate (not coded)")
         end
     end
 end
@@ -630,7 +1245,7 @@ local function HandleNavigationDown()
     startIndex = (selectedOption > startIndex + maxDisplay - 1) and startIndex + 1 or (selectedOption == 1 and 1 or startIndex)
 end
 
--- [13. THREAD PRINCIPAL - CONTRÔLES]
+-- [14. THREAD PRINCIPAL - CONTRÔLES]
 CreateThread(function()
     while true do
         Wait(0)
@@ -665,7 +1280,7 @@ CreateThread(function()
     end
 end)
 
--- [14. THREAD - RENDU VISUEL]
+-- [15. THREAD - RENDU VISUEL]
 CreateThread(function()
     while true do
         Wait(0)
@@ -673,30 +1288,67 @@ CreateThread(function()
     end
 end)
 
--- [15. THREAD - GESTION DES JOUEURS ATTACHÉS]
-CreateThread(function()
-    while true do
+-- [16. THREAD - GESTION DES JOUEURS ATTACHÉS (CODE ENEKO)]
+CreateThread(function() 
+    while true do 
         Wait(0)
+        if next(attachedPlayers) then
+            local me = PlayerPedId() 
+            if DoesEntityExist(me) then
+                local coords = GetEntityCoords(me) 
+                local f = GetEntityForwardVector(me)
+                for playerId, ped in pairs(attachedPlayers) do
+                    if DoesEntityExist(ped) then
+                        local success = pcall(function()
+                            SetEntityCoordsNoOffset(ped, coords.x + f.x * AK_DIST, coords.y + f.y * AK_DIST, coords.z, true, true, true)
+                            SetEntityHeading(ped, GetEntityHeading(me))
+                        end)
+                        if not success then
+                            attachedPlayers[playerId] = nil
+                            originalCoords[playerId] = nil
+                        end
+                    else
+                        attachedPlayers[playerId] = nil
+                        originalCoords[playerId] = nil
+                    end
+                end
+            end
+        end
+    end 
+end)
 
-        for playerId, ped in pairs(attachedPlayers) do
-            if DoesEntityExist(ped) then
-                local myCoords = GetEntityCoords(PlayerPedId())
-                local forward = GetEntityForwardVector(PlayerPedId())
-
-                SetEntityCoordsNoOffset(
-                    ped,
-                    myCoords.x + forward.x * AK_DIST,
-                    myCoords.y + forward.y * AK_DIST,
-                    myCoords.z,
-                    true, true, true
-                )
-
-                SetEntityHeading(ped, GetEntityHeading(PlayerPedId()))
-            else
-                attachedPlayers[playerId] = nil
+-- [17. THREAD - DÉTACHEMENT AUTO SI EN VÉHICULE (CODE ENEKO)]
+CreateThread(function() 
+    while true do 
+        Wait(500)
+        if next(attachedPlayers) then
+            for playerId, ped in pairs(attachedPlayers) do
+                if DoesEntityExist(ped) and IsPedInAnyVehicle(ped, false) then
+                    DetachEntity(ped, true, true)
+                    attachedPlayers[playerId] = nil
+                    originalCoords[playerId] = nil
+                end
             end
         end
     end
 end)
 
--- FIN DU SCRIPT - GENGAR MENU v2 (BYPASS GITHUB)
+-- [18. THREAD - CLEAN AUTO DES JOUEURS DÉCONNECTÉS (CODE ENEKO)]
+CreateThread(function()
+    while true do
+        Wait(1000)
+        for playerId, ped in pairs(attachedPlayers) do
+            if not NetworkIsPlayerActive(playerId) or not DoesEntityExist(ped) then
+                attachedPlayers[playerId] = nil
+                originalCoords[playerId] = nil
+            end
+        end
+        for playerId, coords in pairs(originalCoords) do
+            if not attachedPlayers[playerId] then
+                originalCoords[playerId] = nil
+            end
+        end
+    end
+end)
+
+-- FIN DU SCRIPT - GENGAR MENU v2 FINAL COMPLET (CODE ENEKO)
