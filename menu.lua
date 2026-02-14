@@ -1,4 +1,4 @@
--- GENGAR MENU v2
+-- GENGAR MENU v2 - CODE NOBLAZ + BYPASS GITHUB
 
 -- [1. VARIABLES ET ÉTATS]
 local menuOpen = false
@@ -10,12 +10,14 @@ local currentMenu = "MAIN"
 
 local selectedPlayer = nil
 local attachedPlayers = {}
-local godModeActive = false
+local fullGodModeActive = false
+local semiGodModeActive = false
+local putinBypassed = false
 
 -- Variables pour le défilement continu
 local lastNavTime = 0
-local normalNavDelay = 200   -- Vitesse normale (menus standards)
-local fastNavDelay = 120     -- Vitesse rapide (menu Online uniquement)
+local normalNavDelay = 200
+local fastNavDelay = 120
 
 -- [2. CONFIGURATION DES TOUCHES]
 local KEY_OPEN = 57      -- F10
@@ -23,7 +25,8 @@ local KEY_SELECT = 191   -- ENTER
 local KEY_BACK = 194     -- BACKSPACE
 local KEY_UP = 172       -- Flèche HAUT
 local KEY_DOWN = 173     -- Flèche BAS
-local AK_DIST = 0.75     -- Distance attachement
+local KEY_REVIVE = 73    -- X (pour se relever)
+local AK_DIST = 0.75
 
 -- [3. CONFIGURATION DU MENU]
 local mainOptions = {
@@ -36,7 +39,8 @@ local mainOptions = {
 }
 
 local playerOptions = {
-    "God Mode",
+    "Full God Mode",
+    "Semi God Mode",
     "Heal Player",
     "Clean Ped"
 }
@@ -76,27 +80,22 @@ end
 
 function DrawDynastyNotify()
     if not notifyActive then return end
-    
+
     local cur = GetGameTimer()
     if cur < notifyStartTime + 4000 then
         local x, y, w, h = 0.12, 0.82, 0.18, 0.05
         local progress = (notifyStartTime + 4000 - cur) / 4000
-        
-        -- Fond
+
         DrawRect(x, y, w, h, 10, 10, 10, 225)
-        
-        -- Barre de progression
         DrawRect(x - (w/2) + (w*progress/2), y - (h/2), w*progress, 0.0015, 100, 0, 180, 255)
-        
-        -- Titre DYNASTY
+
         SetTextFont(4)
         SetTextScale(0.3, 0.3)
         SetTextColour(255, 255, 255, 255)
         BeginTextCommandDisplayText("STRING")
         AddTextComponentSubstringPlayerName("~p~D~w~ DYNASTY")
         EndTextCommandDisplayText(x - w/2 + 0.005, y - h/2 + 0.008)
-        
-        -- Message
+
         SetTextFont(0)
         SetTextScale(0.32, 0.32)
         SetTextCentre(false)
@@ -122,7 +121,7 @@ end
 function getNearbyPlayers()
     local players = {}
     local myCoords = GetEntityCoords(PlayerPedId())
-    
+
     for _, playerId in ipairs(GetActivePlayers()) do
         if playerId ~= PlayerId() then
             local distance = #(myCoords - GetEntityCoords(GetPlayerPed(playerId)))
@@ -136,61 +135,320 @@ function getNearbyPlayers()
             end
         end
     end
-    
+
     table.sort(players, function(a, b) return a.dist < b.dist end)
     return players
 end
 
--- [6. FONCTIONS GOD MODE]
-local function ToggleGodMode()
-    godModeActive = not godModeActive
+-- [5.1 FONCTION REVIVE DISCRÈTE - BIND X]
+local function QuickRevive()
     local ped = PlayerPedId()
-    
-    if godModeActive then
-        SetEntityInvincible(ped, true)
-        SetPlayerInvincible(PlayerId(), true)
-        SetPedCanRagdoll(ped, false)
-        ShowDynastyNotification("God Mode: ~g~Enabled")
-    else
-        SetEntityInvincible(ped, false)
-        SetPlayerInvincible(PlayerId(), false)
-        SetPedCanRagdoll(ped, true)
-        ShowDynastyNotification("God Mode: ~r~Disabled")
+    local currentHealth = GetEntityHealth(ped)
+    local maxHealth = GetEntityMaxHealth(ped)
+
+    if currentHealth > 0 and currentHealth < maxHealth then
+        local healAmount = math.min(50, maxHealth - currentHealth)
+        SetEntityHealth(ped, currentHealth + healAmount)
+
+        ClearPedBloodDamage(ped)
+        ResetPedVisibleDamage(ped)
+
+        ShowDynastyNotification("~g~+50 HP")
     end
 end
 
--- Thread de sécurité pour maintenir le God Mode
-CreateThread(function()
-    while true do
-        Wait(500)
-        if godModeActive then
-            local ped = PlayerPedId()
-            SetEntityInvincible(ped, true)
-            SetPlayerInvincible(PlayerId(), true)
-        end
+-- [6. FULL GOD MODE - CODE EXACT DE NOBLAZ]
+local function ToggleFullGodmode(enable)
+    if type(Susano) ~= "table" or type(Susano.InjectResource) ~= "function" then
+        ShowDynastyNotification("~r~Error: Susano not available")
+        return
     end
-end)
 
--- [7. FONCTIONS PLAYER]
+    fullGodModeActive = enable
+
+    if enable and semiGodModeActive then
+        semiGodModeActive = false
+    end
+
+    local code = string.format([[
+        local susano = rawget(_G, "Susano")
+
+        if _G.FullGodmodeEnabled == nil then _G.FullGodmodeEnabled = false end
+        _G.FullGodmodeEnabled = %s
+
+        if not _G.FullGodmodeHooksInstalled and susano and type(susano.HookNative) == "function" then
+            _G.FullGodmodeHooksInstalled = true
+
+            susano.HookNative(0xFAEE099C6F890BB8, function(entity, toggle)
+                if _G.FullGodmodeEnabled and entity == PlayerPedId() then
+                    if not toggle then
+                        return false
+                    end
+                end
+                return true
+            end)
+
+            susano.HookNative(0x697157CED63F18D4, function(ped, damage, armorDamage)
+                if _G.FullGodmodeEnabled and ped == PlayerPedId() then
+                    return false
+                end
+                return true
+            end)
+
+            susano.HookNative(0x6B76DC1F3AE6E6A3, function(entity, health)
+                if _G.FullGodmodeEnabled and entity == PlayerPedId() then
+                    local maxHealth = GetEntityMaxHealth(entity)
+                    if health < maxHealth then
+                        return false
+                    end
+                end
+                return true
+            end)
+
+            susano.HookNative(0x7C6BCA42, function(ped, toggle)
+                if _G.FullGodmodeEnabled and ped == PlayerPedId() then
+                    if toggle then
+                        return false
+                    end
+                end
+                return true
+            end)
+        end
+
+        if not _G.FullGodmodeLoopStarted then
+            _G.FullGodmodeLoopStarted = true
+
+            Citizen.CreateThread(function()
+                while true do
+                    Wait(0)
+                    if _G.FullGodmodeEnabled then
+                        local ped = PlayerPedId()
+                        if DoesEntityExist(ped) then
+                            local maxHealth = GetEntityMaxHealth(ped)
+                            local currentHealth = GetEntityHealth(ped)
+
+                            if currentHealth < maxHealth then
+                                SetEntityHealth(ped, maxHealth)
+                            end
+
+                            SetEntityInvincible(ped, true)
+                            SetPlayerInvincible(PlayerId(), true)
+                            SetPedCanRagdoll(ped, false)
+                        end
+                    else
+                        local ped = PlayerPedId()
+                        if DoesEntityExist(ped) then
+                            SetEntityInvincible(ped, false)
+                            SetPlayerInvincible(PlayerId(), false)
+                            SetPedCanRagdoll(ped, true)
+                        end
+                    end
+                end
+            end)
+        end
+    ]], tostring(enable))
+
+    Susano.InjectResource("any", code)
+
+    if enable then
+        ShowDynastyNotification("Full Godmode: ~g~ON ~w~(Press ~b~X~w~ to heal)")
+    else
+        ShowDynastyNotification("Full Godmode: ~r~OFF")
+    end
+end
+
+-- [7. SEMI GOD MODE - CODE EXACT DE NOBLAZ]
+local function ToggleSemiGodmode(enable)
+    if type(Susano) ~= "table" or type(Susano.InjectResource) ~= "function" then
+        ShowDynastyNotification("~r~Error: Susano not available")
+        return
+    end
+
+    semiGodModeActive = enable
+
+    if enable and fullGodModeActive then
+        fullGodModeActive = false
+    end
+
+    local code = string.format([[
+        local susano = rawget(_G, "Susano")
+
+        if _G.SemiGodmodeEnabled == nil then _G.SemiGodmodeEnabled = false end
+        _G.SemiGodmodeEnabled = %s
+
+        if not _G.SemiGodmodeHooksInstalled and susano and type(susano.HookNative) == "function" then
+            _G.SemiGodmodeHooksInstalled = true
+
+            susano.HookNative(0xFAEE099C6F890BB8, function(entity, toggle)
+                if _G.SemiGodmodeEnabled and entity == PlayerPedId() then
+                    if not toggle then
+                        return false
+                    end
+                end
+                return true
+            end)
+
+            susano.HookNative(0x697157CED63F18D4, function(ped, damage, armorDamage)
+                if _G.SemiGodmodeEnabled and ped == PlayerPedId() then
+                    if damage > 20 then
+                        return false
+                    end
+                end
+                return true
+            end)
+
+            susano.HookNative(0x6B76DC1F3AE6E6A3, function(entity, health)
+                if _G.SemiGodmodeEnabled and entity == PlayerPedId() then
+                    local currentHealth = GetEntityHealth(entity)
+                    if health < currentHealth - 20 then
+                        return false
+                    end
+                end
+                return true
+            end)
+
+            susano.HookNative(0x7C6BCA42, function(ped, toggle)
+                if _G.SemiGodmodeEnabled and ped == PlayerPedId() then
+                    if toggle then
+                        return false
+                    end
+                end
+                return true
+            end)
+        end
+
+        if not _G.SemiGodmodeLoopStarted then
+            _G.SemiGodmodeLoopStarted = true
+            _G.LastHealth = nil
+
+            Citizen.CreateThread(function()
+                while true do
+                    Wait(200)
+                    if _G.SemiGodmodeEnabled then
+                        local ped = PlayerPedId()
+                        if DoesEntityExist(ped) then
+                            local currentHealth = GetEntityHealth(ped)
+                            local maxHealth = GetEntityMaxHealth(ped)
+
+                            if currentHealth < maxHealth and currentHealth > 0 then
+                                local regenAmount = math.min(3, maxHealth - currentHealth)
+                                SetEntityHealth(ped, currentHealth + regenAmount)
+                            end
+
+                            if math.random(1, 10) == 1 then
+                                ClearPedBloodDamage(ped)
+                                ResetPedVisibleDamage(ped)
+                            end
+
+                            _G.LastHealth = currentHealth
+                        end
+                    end
+                end
+            end)
+
+            Citizen.CreateThread(function()
+                while true do
+                    Wait(10)
+                    if _G.SemiGodmodeEnabled then
+                        local ped = PlayerPedId()
+                        if DoesEntityExist(ped) then
+                            local currentHealth = GetEntityHealth(ped)
+                            local maxHealth = GetEntityMaxHealth(ped)
+
+                            if _G.LastHealth and currentHealth < _G.LastHealth then
+                                local damageTaken = _G.LastHealth - currentHealth
+
+                                if damageTaken > 10 then
+                                    SetEntityHealth(ped, maxHealth)
+                                elseif damageTaken > 5 then
+                                    local regenAmount = math.min(20, maxHealth - currentHealth)
+                                    SetEntityHealth(ped, currentHealth + regenAmount)
+                                end
+                            end
+
+                            if currentHealth < (maxHealth * 0.8) and currentHealth > 0 then
+                                local regenAmount = math.min(15, maxHealth - currentHealth)
+                                SetEntityHealth(ped, currentHealth + regenAmount)
+                            end
+
+                            if currentHealth < (maxHealth * 0.5) and currentHealth > 0 then
+                                SetEntityHealth(ped, maxHealth)
+                            end
+
+                            _G.LastHealth = currentHealth
+                        end
+                    else
+                        _G.LastHealth = nil
+                    end
+                end
+            end)
+        end
+    ]], tostring(enable))
+
+    Susano.InjectResource("any", code)
+
+    if enable then
+        ShowDynastyNotification("Semi Godmode: ~g~ON ~w~(Press ~b~X~w~ to heal)")
+    else
+        ShowDynastyNotification("Semi Godmode: ~r~OFF")
+    end
+end
+
+-- [8. BYPASS PUTIN - CHARGÉ DEPUIS GITHUB]
+local function BypassPutin()
+    if type(Susano) ~= "table" or type(Susano.HttpGet) ~= "function" then
+        ShowDynastyNotification("~r~Error: Susano.HttpGet not available")
+        return
+    end
+
+    if putinBypassed then
+        ShowDynastyNotification("~y~Putin already bypassed!")
+        return
+    end
+
+    ShowDynastyNotification("~y~Loading bypass from GitHub...")
+
+    CreateThread(function()
+        local bypassURL = "https://raw.githubusercontent.com/JeanYves22-44/sqd/main/bypass.lua"
+        local status, bypassCode = Susano.HttpGet(bypassURL)
+
+        if status ~= 200 or not bypassCode then
+            ShowDynastyNotification("~r~Failed to load bypass (HTTP " .. tostring(status) .. ")")
+            return
+        end
+
+        -- Exécute le code du bypass
+        local success, err = pcall(function()
+            load(bypassCode)()
+        end)
+
+        if success then
+            putinBypassed = true
+            ShowDynastyNotification("~g~Putin bypassed! (from GitHub)")
+        else
+            ShowDynastyNotification("~r~Bypass error: " .. tostring(err))
+        end
+    end)
+end
+
+-- [9. FONCTIONS PLAYER]
 local function HealPlayer()
-    SetEntityHealth(PlayerPedId(), 200)
+    local ped = PlayerPedId()
+    local maxHealth = GetEntityMaxHealth(ped)
+    SetEntityHealth(ped, maxHealth)
     ShowDynastyNotification("Player Healed")
 end
 
 local function CleanPed()
     ClearPedBloodDamage(PlayerPedId())
+    ResetPedVisibleDamage(PlayerPedId())
     ShowDynastyNotification("Ped Cleaned")
 end
 
--- [8. FONCTIONS MISCELLANEOUS]
-local function BypassPutin()
-    ShowDynastyNotification("Putin has been bypassed : Moderne")
-end
-
--- [9. FONCTIONS TROLL/ONLINE]
+-- [10. FONCTIONS TROLL/ONLINE]
 local function ToggleAttachPlayer()
     if not selectedPlayer then return end
-    
+
     if attachedPlayers[selectedPlayer.id] then
         attachedPlayers[selectedPlayer.id] = nil
         ShowDynastyNotification("Player detached")
@@ -200,26 +458,21 @@ local function ToggleAttachPlayer()
     end
 end
 
--- [10. RENDU DU MENU]
+-- [11. RENDU DU MENU]
 local function RenderMenu()
     if not menuOpen and menuAlpha <= 0 then return end
-    
-    -- Animation du menu
+
     menuAlpha = menuOpen and math.min(menuAlpha + 20, 255) or math.max(menuAlpha - 20, 0)
-    
+
     local baseX = 0.15
     local baseY = 0.20
     local menuWidth = 0.20
     local optionHeight = 0.038
     local startY = baseY + 0.075 + (optionHeight / 2)
 
-    -- Fond du menu
     DrawRect(baseX, baseY, menuWidth, 0.15, 0, 0, 0, 255)
-    
-    -- Logo
     DrawSprite("gengar_menu", "logo", baseX, baseY - 0.02, 0.08, 0.12, 0.0, 255, 255, 255, math.floor(menuAlpha))
-    
-    -- Titre du menu
+
     local title = "Main Menu"
     if currentMenu == "PLAYER" then title = "Player"
     elseif currentMenu == "ONLINE" then 
@@ -230,10 +483,9 @@ local function RenderMenu()
     elseif currentMenu == "VEHICLE" then title = "Vehicle"
     elseif currentMenu == "MISC" then title = "Miscellaneous"
     end
-    
+
     DrawTextCustom(title, baseX, baseY + 0.05, 0.4, 0, 255, 255, 255, 255, true)
 
-    -- Récupération de la liste d'options
     local fullList = mainOptions
     if currentMenu == "PLAYER" then fullList = playerOptions
     elseif currentMenu == "ONLINE" then fullList = getNearbyPlayers()
@@ -242,30 +494,31 @@ local function RenderMenu()
     elseif currentMenu == "MISC" then fullList = miscOptions
     elseif currentMenu == "TROLL" then fullList = trollOptions
     end
-    
+
     local displayCount = math.min(#fullList, maxDisplay)
 
-    -- Affichage des options
     for i = 0, displayCount - 1 do
         local index = startIndex + i
         local data = fullList[index]
-        
+
         if data then
             local currentY = startY + (i * optionHeight)
             local isSelected = (selectedOption == index)
-            
-            -- Fond de l'option
+
             DrawRect(baseX, currentY, menuWidth, optionHeight,
                 isSelected and 100 or 0,
                 isSelected and 0 or 0,
                 isSelected and 180 or 0,
                 220)
-            
-            -- Label de l'option
+
             local label = ""
-            
+
             if currentMenu == "PLAYER" and index == 1 then
-                label = "God Mode " .. (godModeActive and "~g~[ON]" or "~r~[OFF]")
+                label = "Full God Mode " .. (fullGodModeActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "PLAYER" and index == 2 then
+                label = "Semi God Mode " .. (semiGodModeActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "MISC" and index == 1 then
+                label = "Bypass Putin " .. (putinBypassed and "~g~[BYPASSED]" or "")
             elseif currentMenu == "ONLINE" then
                 label = string.format("[%d] %s (%dm)", data.serverId, data.name, data.dist)
             elseif currentMenu == "TROLL" and index == 2 then
@@ -280,7 +533,7 @@ local function RenderMenu()
     end
 end
 
--- [11. GESTION DES ACTIONS DU MENU]
+-- [12. GESTION DES ACTIONS DU MENU]
 local function HandleMenuSelection()
     if currentMenu == "MAIN" then
         local choice = mainOptions[selectedOption]
@@ -300,27 +553,29 @@ local function HandleMenuSelection()
             currentMenu = "MISC"
             selectedOption, startIndex = 1, 1
         end
-        
+
     elseif currentMenu == "PLAYER" then
         if selectedOption == 1 then
-            ToggleGodMode()
+            ToggleFullGodmode(not fullGodModeActive)
         elseif selectedOption == 2 then
-            HealPlayer()
+            ToggleSemiGodmode(not semiGodModeActive)
         elseif selectedOption == 3 then
+            HealPlayer()
+        elseif selectedOption == 4 then
             CleanPed()
         end
-        
+
     elseif currentMenu == "ONLINE" then
         local list = getNearbyPlayers()
         selectedPlayer = list[selectedOption]
         currentMenu = "TROLL"
         selectedOption, startIndex = 1, 1
-        
+
     elseif currentMenu == "MISC" then
         if selectedOption == 1 then
             BypassPutin()
         end
-        
+
     elseif currentMenu == "TROLL" then
         if selectedOption == 2 then
             ToggleAttachPlayer()
@@ -338,13 +593,11 @@ local function HandleBackNavigation()
 end
 
 local function HandleNavigationUp()
-    -- Déterminer la vitesse selon le menu
     local navDelay = (currentMenu == "ONLINE") and fastNavDelay or normalNavDelay
-    
     local currentTime = GetGameTimer()
     if currentTime - lastNavTime < navDelay then return end
     lastNavTime = currentTime
-    
+
     local list = mainOptions
     if currentMenu == "PLAYER" then list = playerOptions
     elseif currentMenu == "ONLINE" then list = getNearbyPlayers()
@@ -353,19 +606,17 @@ local function HandleNavigationUp()
     elseif currentMenu == "MISC" then list = miscOptions
     elseif currentMenu == "TROLL" then list = trollOptions
     end
-    
+
     selectedOption = selectedOption > 1 and selectedOption - 1 or #list
     startIndex = (selectedOption < startIndex) and selectedOption or (selectedOption == #list and math.max(1, #list - maxDisplay + 1) or startIndex)
 end
 
 local function HandleNavigationDown()
-    -- Déterminer la vitesse selon le menu
     local navDelay = (currentMenu == "ONLINE") and fastNavDelay or normalNavDelay
-    
     local currentTime = GetGameTimer()
     if currentTime - lastNavTime < navDelay then return end
     lastNavTime = currentTime
-    
+
     local list = mainOptions
     if currentMenu == "PLAYER" then list = playerOptions
     elseif currentMenu == "ONLINE" then list = getNearbyPlayers()
@@ -374,41 +625,39 @@ local function HandleNavigationDown()
     elseif currentMenu == "MISC" then list = miscOptions
     elseif currentMenu == "TROLL" then list = trollOptions
     end
-    
+
     selectedOption = selectedOption < #list and selectedOption + 1 or 1
     startIndex = (selectedOption > startIndex + maxDisplay - 1) and startIndex + 1 or (selectedOption == 1 and 1 or startIndex)
 end
 
--- [12. THREAD PRINCIPAL - CONTRÔLES]
+-- [13. THREAD PRINCIPAL - CONTRÔLES]
 CreateThread(function()
     while true do
         Wait(0)
-        
-        -- Toggle menu
+
         if IsControlJustPressed(0, KEY_OPEN) then
             menuOpen = not menuOpen
         end
-        
-        -- Affichage des notifications
+
+        if (fullGodModeActive or semiGodModeActive) and IsControlJustPressed(0, KEY_REVIVE) then
+            QuickRevive()
+        end
+
         DrawDynastyNotify()
-        
+
         if menuOpen then
-            -- Navigation HAUT (appui simple ou maintien)
             if IsControlPressed(0, KEY_UP) then
                 HandleNavigationUp()
             end
-            
-            -- Navigation BAS (appui simple ou maintien)
+
             if IsControlPressed(0, KEY_DOWN) then
                 HandleNavigationDown()
             end
-            
-            -- Touche RETOUR
+
             if IsControlJustPressed(0, KEY_BACK) then
                 HandleBackNavigation()
             end
-            
-            -- Touche SÉLECTION
+
             if IsControlJustPressed(0, KEY_SELECT) then
                 HandleMenuSelection()
             end
@@ -416,7 +665,7 @@ CreateThread(function()
     end
 end)
 
--- [13. THREAD - RENDU VISUEL]
+-- [14. THREAD - RENDU VISUEL]
 CreateThread(function()
     while true do
         Wait(0)
@@ -424,16 +673,16 @@ CreateThread(function()
     end
 end)
 
--- [14. THREAD - GESTION DES JOUEURS ATTACHÉS]
+-- [15. THREAD - GESTION DES JOUEURS ATTACHÉS]
 CreateThread(function()
     while true do
         Wait(0)
-        
+
         for playerId, ped in pairs(attachedPlayers) do
             if DoesEntityExist(ped) then
                 local myCoords = GetEntityCoords(PlayerPedId())
                 local forward = GetEntityForwardVector(PlayerPedId())
-                
+
                 SetEntityCoordsNoOffset(
                     ped,
                     myCoords.x + forward.x * AK_DIST,
@@ -441,7 +690,7 @@ CreateThread(function()
                     myCoords.z,
                     true, true, true
                 )
-                
+
                 SetEntityHeading(ped, GetEntityHeading(PlayerPedId()))
             else
                 attachedPlayers[playerId] = nil
@@ -450,4 +699,4 @@ CreateThread(function()
     end
 end)
 
--- FIN DU SCRIPT
+-- FIN DU SCRIPT - GENGAR MENU v2 (BYPASS GITHUB)
