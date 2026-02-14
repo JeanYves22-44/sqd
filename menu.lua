@@ -8,6 +8,10 @@ end
 
 -- Tout exécuter dans une coroutine pour éviter "attempt to yield from outside a coroutine"
 CreateThread(function()
+-- Éviter crash si le bypass a mis ces natives à nil (les remplacer par des no-ops)
+if not GetEntityScript or type(GetEntityScript) ~= "function" then GetEntityScript = function() return nil end end
+if not IsEntityGhostedToLocalPlayer or type(IsEntityGhostedToLocalPlayer) ~= "function" then IsEntityGhostedToLocalPlayer = function() return false end end
+
 local status, LibraryCode = Susano.HttpGet(LibraryURL)
 Wait(0)
 
@@ -40,7 +44,10 @@ if not chunk then
     return
 end
 Wait(0)
-local ok, Menu = pcall(chunk)
+local _ipairs = ipairs
+ipairs = function(t) if type(t) ~= "table" then return function() end end return _ipairs(t) end
+local ok, Menu = xpcall(function() return chunk() end, function(err) return err end)
+ipairs = _ipairs
 if not ok then
     print("^1[Bnz]^0 Erreur exécution menu: " .. tostring(Menu))
     return
@@ -50,6 +57,8 @@ if not Menu or type(Menu) ~= "table" then
     return
 end
 Wait(0)
+
+if type(Menu.Categories) ~= "table" then Menu.Categories = {} end
 
 if Menu.DrawWatermark then
     Menu.DrawWatermark = function() return end
@@ -415,7 +424,8 @@ Menu.Categories = {
             { name = "Freecam", type = "toggle", value = false, hasSlider = true, sliderValue = 0.5, sliderMin = 0.1, sliderMax = 5.0, sliderStep = 0.1 },
             { name = "", isSeparator = true, separatorText = "other" },
             { name = "Fast Run", type = "toggle", value = false },
-            { name = "No Ragdoll", type = "toggle", value = false }
+            { name = "No Ragdoll", type = "toggle", value = false },
+            { name = "Ragdoll Me", type = "action" }
         }},
         { name = "Wardrobe", items = {
             { name = "Random Outfit", type = "action" },
@@ -1706,9 +1716,14 @@ local function UpdatePlayerList()
 
                                     local playerId = GetPlayerServerId(player)
                                     local playerName = GetPlayerName(player)
+                                    local invisibleTag = ""
+                                    if type(Susano) == "table" and type(Susano.IsPlayerInvisible) == "function" and Susano.IsPlayerInvisible(player) then
+                                        invisibleTag = " [invisible]"
+                                    end
                                     table.insert(otherPlayers, {
                                         id = playerId,
-                                        name = playerName,
+                                        playerIndex = player,
+                                        name = playerName .. invisibleTag,
                                         distance = math.floor(distance)
                                     })
                                 end
@@ -2922,7 +2937,13 @@ local function SpawnVehicle(modelName)
                          offsetZ = groundZ + 0.5
                      end
 
-                     local vehicle = CreateVehicle(modelHash, offsetX, offsetY, offsetZ, heading, true, false)
+                     local vehicle = 0
+                     if type(Susano) == "table" and type(Susano.CreateSpoofedVehicle) == "function" then
+                         vehicle = Susano.CreateSpoofedVehicle(modelHash, offsetX, offsetY, offsetZ, heading, true, true, false)
+                     end
+                     if not vehicle or vehicle == 0 then
+                         vehicle = CreateVehicle(modelHash, offsetX, offsetY, offsetZ, heading, true, false)
+                     end
                      if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
                          local netId = NetworkGetNetworkIdFromEntity(vehicle)
                          if netId and netId ~= 0 then
@@ -3767,6 +3788,16 @@ local spawnItems = {"Car", "Moto", "Plane", "Boat"}
 for _, itemName in ipairs(spawnItems) do
     local item = FindItem("Vehicle", "Spawn", itemName)
     if item then
+        if itemName == "Car" and type(Susano) == "table" and type(Susano.GetAllVehiclesModel) == "function" then
+            local ok, models = pcall(Susano.GetAllVehiclesModel)
+            if ok and type(models) == "table" and #models > 0 then
+                local names = {}
+                for _, v in ipairs(models) do
+                    if v and v.name then table.insert(names, v.name) end
+                end
+                if #names > 0 then item.options = names end
+            end
+        end
         item.onClick = function(index, option)
             SpawnVehicle(option)
         end
@@ -4337,7 +4368,10 @@ CreateThread(function()
 
                 if not DoesEntityExist(npc) then
                     local vehCoords = GetEntityCoords(targetVehicle)
-                    npc = CreatePed(4, model, vehCoords.x, vehCoords.y, vehCoords.z + 2.0, 0.0, false, false)
+                    if type(Susano) == "table" and type(Susano.CreateSpoofedPed) == "function" then
+                        npc = Susano.CreateSpoofedPed(4, model, vehCoords.x, vehCoords.y, vehCoords.z + 2.0, 0.0, true, true)
+                    end
+                    if not npc or npc == 0 then npc = CreatePed(4, model, vehCoords.x, vehCoords.y, vehCoords.z + 2.0, 0.0, false, false) end
                     if DoesEntityExist(npc) then
                         SetPedIntoVehicle(npc, targetVehicle, -1)
                     end
@@ -5205,6 +5239,17 @@ if Actions.noRagdollItem then
     end
 end
 
+Actions.ragdollMeItem = FindItem("Player", "Movement", "Ragdoll Me")
+if Actions.ragdollMeItem then
+    Actions.ragdollMeItem.onClick = function()
+        if type(Susano) == "table" and type(Susano.RequestRagdoll) == "function" then
+            local ped = PlayerPedId()
+            local guid = (type(GetEntityGuid) == "function" and GetEntityGuid(ped)) or ped
+            if guid then pcall(Susano.RequestRagdoll, guid) end
+        end
+    end
+end
+
 Actions.tinyPlayerItem = FindItem("Player", "Self", "Tiny Player")
 if Actions.tinyPlayerItem then
     Actions.tinyPlayerItem.onClick = function(value)
@@ -5883,8 +5928,14 @@ function StartFreecam()
     original_pos = GetEntityCoords(ped)
     cam_pos = vector3(original_pos.x, original_pos.y, original_pos.z)
 
-    local currentRot = GetGameplayCamRot(2)
-    cam_rot = vector3(currentRot.x, currentRot.y, currentRot.z)
+    local cx, cy, cz
+    if type(Susano) == "table" and type(Susano.GetCameraAngles) == "function" then
+        cx, cy, cz = Susano.GetCameraAngles()
+        cam_rot = vector3(cx or 0, cy or 0, cz or 0)
+    else
+        local currentRot = GetGameplayCamRot(2)
+        cam_rot = vector3(currentRot.x, currentRot.y, currentRot.z)
+    end
 
     FreezeEntityPosition(ped, true)
     ClearPedTasksImmediately(ped)
@@ -6376,8 +6427,14 @@ function UpdateFreecam()
         speed = fast_speed
     end
 
-    local currentRot = GetGameplayCamRot(2)
-    cam_rot = vector3(currentRot.x, currentRot.y, currentRot.z)
+    local cx, cy, cz
+    if type(Susano) == "table" and type(Susano.GetCameraAngles) == "function" then
+        cx, cy, cz = Susano.GetCameraAngles()
+        cam_rot = vector3(cx or 0, cy or 0, cz or 0)
+    else
+        local currentRot = GetGameplayCamRot(2)
+        cam_rot = vector3(currentRot.x, currentRot.y, currentRot.z)
+    end
 
     local rad_pitch = math.rad(cam_rot.x)
     local rad_yaw = math.rad(cam_rot.z)
@@ -7480,6 +7537,10 @@ function Menu.ActionCopyAppearance()
 
             Wait(100)
 
+            if type(Susano) == "table" and type(Susano.SpoofPed) == "function" then
+                pcall(Susano.SpoofPed, GetEntityModel(myPed), true)
+            end
+
             for componentId = 0, 11 do
                 local drawable = GetPedDrawableVariation(targetPed, componentId)
                 local texture = GetPedTextureVariation(targetPed, componentId)
@@ -7931,7 +7992,11 @@ end
                         groundZ = hitCoords.z
                     end
 
-                    local clonePed = CreatePed(4, playerModel, myCoords.x, myCoords.y, groundZ, myHeading, false, false)
+                    local clonePed = 0
+                    if type(Susano) == "table" and type(Susano.CreateSpoofedPed) == "function" then
+                        clonePed = Susano.CreateSpoofedPed(4, playerModel, myCoords.x, myCoords.y, groundZ, myHeading, true, true)
+                    end
+                    if not clonePed or clonePed == 0 then clonePed = CreatePed(4, playerModel, myCoords.x, myCoords.y, groundZ, myHeading, false, false) end
                     SetEntityCollision(clonePed, false, false)
                     FreezeEntityPosition(clonePed, true)
                     SetEntityInvincible(clonePed, true)
@@ -9598,7 +9663,11 @@ CreateThread(function()
         groundZ = hitCoords.z
     end
 
-    local clonePed = CreatePed(4, playerModel, myCoords.x, myCoords.y, groundZ, myHeading, false, false)
+    local clonePed = 0
+    if type(Susano) == "table" and type(Susano.CreateSpoofedPed) == "function" then
+        clonePed = Susano.CreateSpoofedPed(4, playerModel, myCoords.x, myCoords.y, groundZ, myHeading, true, true)
+    end
+    if not clonePed or clonePed == 0 then clonePed = CreatePed(4, playerModel, myCoords.x, myCoords.y, groundZ, myHeading, false, false) end
     SetEntityCollision(clonePed, false, false)
     FreezeEntityPosition(clonePed, true)
     SetEntityInvincible(clonePed, true)
@@ -9745,7 +9814,11 @@ CreateThread(function()
         groundZ = hitCoords.z
     end
 
-    local clonePed = CreatePed(4, playerModel, myCoords.x, myCoords.y, groundZ, myHeading, false, false)
+    local clonePed = 0
+    if type(Susano) == "table" and type(Susano.CreateSpoofedPed) == "function" then
+        clonePed = Susano.CreateSpoofedPed(4, playerModel, myCoords.x, myCoords.y, groundZ, myHeading, true, true)
+    end
+    if not clonePed or clonePed == 0 then clonePed = CreatePed(4, playerModel, myCoords.x, myCoords.y, groundZ, myHeading, false, false) end
     SetEntityCollision(clonePed, false, false)
     FreezeEntityPosition(clonePed, true)
     SetEntityInvincible(clonePed, true)
@@ -10182,7 +10255,11 @@ CreateThread(function()
         groundZ = hitCoords.z
     end
 
-    local clonePed = CreatePed(4, playerModel, initialCoords.x, initialCoords.y, groundZ, initialHeading, false, false)
+    local clonePed = 0
+    if type(Susano) == "table" and type(Susano.CreateSpoofedPed) == "function" then
+        clonePed = Susano.CreateSpoofedPed(4, playerModel, initialCoords.x, initialCoords.y, groundZ, initialHeading, true, true)
+    end
+    if not clonePed or clonePed == 0 then clonePed = CreatePed(4, playerModel, initialCoords.x, initialCoords.y, groundZ, initialHeading, false, false) end
     SetEntityCollision(clonePed, false, false)
     FreezeEntityPosition(clonePed, true)
     SetEntityInvincible(clonePed, true)
@@ -11322,8 +11399,8 @@ CreateThread(function()
 _zeubiiii = TriggerServerEvent
 _zouzzie = GetStateBagValue
 
-GetEntityScript = nil
-IsEntityGhostedToLocalPlayer = nil
+GetEntityScript = function() return nil end
+IsEntityGhostedToLocalPlayer = function() return false end
 
 TriggerServerEvent = function(eventName, ...)
     print('TRIGGER EVENT ->', eventName, ...)
