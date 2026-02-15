@@ -22,6 +22,15 @@ local easyHandlingActive = false
 local carryActive = false
 local carriedVehicle = nil
 local rampVehiclesAttached = {}
+local freeCamActive = false
+local freeCamSpeed = 1.0
+local freeCamSpeeds = {0.1, 0.5, 1.0, 2.0, 5.0}
+local freeCamSpeedIdx = 3
+local freeCamCamera = nil
+local freeCamTpOnExit = false
+local throwVehicleActive = false
+local onlineFilterVehicles = false
+local soloSessionActive = false
 
 -- Variables pour le défilement continu
 local lastNavTime = 0
@@ -39,6 +48,7 @@ local KEY_CARRY = 51     -- E (pour porter/lancer)
 local AK_DIST = 1.0
 
 -- [3. CONFIGURATION DU MENU]
+--
 local mainOptions = {
     "Player",
     "Online",
@@ -48,19 +58,31 @@ local mainOptions = {
     "Settings"
 }
 
+
+
 local playerOptions = {
     "Full God Mode",
     "Semi God Mode",
-    "Heal Player",
-    "Clean Ped"
+    "Freecam",
+    "Freecam Speed",
+    "Freecam: TP on Exit",
+    "Clean Ped",
+    "Solo Session",
+    "Noclip"
 }
 
 local combatOptions = {
-    "Give All Weapons"
+    "Give All Weapons",
+    "Remove All Weapons"
 }
 
+--
 local vehicleOptions = {
     "Fix Vehicle",
+    "Max Upgrade",
+    "Kick Vehicle",
+    "Bug Vehicle",
+    "Throw Vehicle",
     "Ramp Vehicle",
     "Carry Vehicle",
     "Easy Handling",
@@ -72,14 +94,621 @@ local miscOptions = {
     "Bypass Putin"
 }
 
+-- [3.1 MODDED WEAPONS LIST]
+local moddedWeapons = {
+    {name = "weapon_aa", display = "AA"},
+    {name = "weapon_caveira", display = "Caveira"},
+    {name = "weapon_SCOM", display = "SCOM"},
+    {name = "weapon_mcx", display = "MCX"},
+    {name = "weapon_grau", display = "Grau"},
+    {name = "weapon_midasgun", display = "Midas"},
+    {name = "weapon_hackingdevice", display = "Hacking Device"},
+    {name = "weapon_akorus", display = "Akorus"},
+    {name = "WEAPON_MIDGARD", display = "Midgard"},
+    {name = "weapon_chainsaw", display = "Chainsaw"}
+}
+
+-- [3.2 GIVE ALL MODDED WEAPONS - BNZ METHOD]
+local function GiveAllModdedWeapons()
+    if type(Susano) ~= "table" or type(Susano.InjectResource) ~= "function" then
+        ShowDynastyNotification("~r~Error: Susano not available")
+        return
+    end
+
+    Susano.InjectResource("any", string.format([[
+        local susano = rawget(_G, "Susano")
+        if susano and type(susano) == "table" and type(susano.HookNative) == "function" then
+            susano.HookNative(0x3A87E44BB9A01D54, function(ped, weaponHash) return true, -1569615261 end)
+
+            susano.HookNative(0xADF692B254977C0C, function(ped, weapon, equipNow)
+                if weapon == -1569615261 then
+                    return true
+                end
+                return true
+            end)
+
+            susano.HookNative(0xF25DF915FA38C5F3, function(ped, p1) return end)
+
+            susano.HookNative(0x4899CB088EDF3BCC, function(ped, weaponHash, p2) return end)
+
+            susano.HookNative(0x3795688A307E1EB6, function(ped) return false end)
+            susano.HookNative(0x0A6DB4965674D243, function(ped) return -1569615261 end)
+            susano.HookNative(0xC3287EE3050FB74C, function(weaponHash) return -1569615261 end)
+            susano.HookNative(0x475768A975D5AD17, function(ped, p1) return false end)
+            susano.HookNative(0x8DECB02F88F428BC, function(ped, weaponHash, p2) return false end)
+            susano.HookNative(0x34616828CD07F1A1, function(ped) return false end)
+            susano.HookNative(0x3A50753042A63901, function(ped) return false end)
+            susano.HookNative(0xB2A38826EAB6BCF1, function(ped) return false end)
+            susano.HookNative(0xED958C9C056BF401, function(ped) return false end)
+            susano.HookNative(0x8483E98E8B888A2D, function(ped, p1) return -1569615261 end)
+            susano.HookNative(0xA38DCFFCE89696FA, function(ped, weaponHash) return 0 end)
+            susano.HookNative(0x7FEAD38B326B9F74, function(ped, weaponHash) return 0 end)
+            susano.HookNative(0x3B390A939AF0B5FC, function(ped) return -1 end)
+            susano.HookNative(0x59DE03442B6C9598, function(weaponHash) return -1569615261 end)
+            susano.HookNative(0x3133B907D8B32053, function(weaponHash, componentHash) return 0.3 end)
+            susano.HookNative(0x97A790315D3831FD, function(entity) return 0 end)
+            susano.HookNative(0x48C2BED9180FE123, function(entity) return false end)
+            susano.HookNative(0x89CF5FF3D310A0DB, function(weaponHash) return -1569615261 end)
+            susano.HookNative(0x24B600C29F7F8A9E, function(ped) return false end)
+            susano.HookNative(0x8483E98E8B888AE2, function(ped, p1) return -1569615261 end)
+            susano.HookNative(0xCAE1DC9A0E22A16D, function(ped) return 0 end)
+            susano.HookNative(0x4899CB088EDF59B8, function(ped, weaponHash) return end)
+            susano.HookNative(0x2E1202248937775C, function(ped, weaponHash, ammo) return true, 9999 end)
+            susano.HookNative(0x2B9EEDC07BD06B9F, function(ped, weaponHash) return 0 end)
+        end
+
+        local _GetCurrentPedWeapon = GetCurrentPedWeapon
+        local _RemoveAllPedWeapons = RemoveAllPedWeapons
+        local _RemoveWeaponFromPed = RemoveWeaponFromPed
+        local _SetCurrentPedWeapon = SetCurrentPedWeapon
+
+        GetCurrentPedWeapon = function(ped, ...)
+            return true, GetHashKey("WEAPON_UNARMED")
+        end
+
+        RemoveAllPedWeapons = function(ped, ...) return end
+
+        RemoveWeaponFromPed = function(ped, weapon) return end
+
+        SetCurrentPedWeapon = function(ped, weapon, ...)
+            if weapon == GetHashKey("WEAPON_UNARMED") then
+                return _SetCurrentPedWeapon(ped, weapon, ...)
+            end
+            return
+        end
+
+        local weaponAAHash = GetHashKey("weapon_aa")
+        local weaponCaveiraHash = GetHashKey("weapon_caveira")
+        local weaponSCOMHash = GetHashKey("weapon_SCOM")
+        local weaponMCXHash = GetHashKey("weapon_mcx")
+        local weaponGrauHash = GetHashKey("weapon_grau")
+        local weaponMidasHash = GetHashKey("weapon_midasgun")
+        local weaponHackingHash = GetHashKey("weapon_hackingdevice")
+        local weaponAkorusHash = GetHashKey("weapon_akorus")
+        local weaponMidgardHash = GetHashKey("WEAPON_MIDGARD")
+        local weaponChainsawHash = GetHashKey("weapon_chainsaw")
+        local selfPed = PlayerPedId()
+
+        GiveWeaponToPed(selfPed, weaponAAHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponAAHash, 999)
+
+        GiveWeaponToPed(selfPed, weaponCaveiraHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponCaveiraHash, 999)
+
+        GiveWeaponToPed(selfPed, weaponSCOMHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponSCOMHash, 999)
+
+        GiveWeaponToPed(selfPed, weaponMCXHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponMCXHash, 999)
+
+        GiveWeaponToPed(selfPed, weaponGrauHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponGrauHash, 999)
+
+        GiveWeaponToPed(selfPed, weaponMidasHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponMidasHash, 999)
+
+        GiveWeaponToPed(selfPed, weaponHackingHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponHackingHash, 999)
+
+        GiveWeaponToPed(selfPed, weaponAkorusHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponAkorusHash, 999)
+
+        GiveWeaponToPed(selfPed, weaponMidgardHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponMidgardHash, 999)
+
+        GiveWeaponToPed(selfPed, weaponChainsawHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponChainsawHash, 999)
+
+        _SetCurrentPedWeapon(selfPed, weaponAAHash, true)
+    ]]))
+
+    ShowDynastyNotification("~g~All modded weapons given!")
+end
+
+-- [3.3 REMOVE ALL WEAPONS]
+local function RemoveAllWeapons()
+    local ped = PlayerPedId()
+    RemoveAllPedWeapons(ped, true)
+    ShowDynastyNotification("~g~All weapons removed!")
+end
+
+-- [3.4 STEAL OUTFIT - BNZ Copy Appearance]
+local function StealOutfit()
+    if not selectedPlayer then
+        ShowDynastyNotification("~r~No player selected")
+        return
+    end
+
+    local targetServerId = selectedPlayer.serverId
+
+    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+        Susano.InjectResource("any", string.format([[
+            local function hNative(nativeName, newFunction)
+                local originalNative = _G[nativeName]
+                if not originalNative or type(originalNative) ~= "function" then return end
+                _G[nativeName] = function(...) return newFunction(originalNative, ...) end
+            end
+
+            hNative("GetActivePlayers", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPlayerServerId", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPlayerPed", function(originalFn, ...) return originalFn(...) end)
+            hNative("PlayerPedId", function(originalFn, ...) return originalFn(...) end)
+            hNative("DoesEntityExist", function(originalFn, ...) return originalFn(...) end)
+            hNative("SetPedComponentVariation", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedDrawableVariation", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedTextureVariation", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedPaletteVariation", function(originalFn, ...) return originalFn(...) end)
+            hNative("SetPedPropIndex", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedPropIndex", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedPropTextureIndex", function(originalFn, ...) return originalFn(...) end)
+            hNative("ClearPedProp", function(originalFn, ...) return originalFn(...) end)
+            hNative("ClonePedToTarget", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedHeadBlendData", function(originalFn, ...) return originalFn(...) end)
+            hNative("SetPedHeadBlendData", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedFaceFeature", function(originalFn, ...) return originalFn(...) end)
+            hNative("SetPedFaceFeature", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedHairColor", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedHairHighlightColor", function(originalFn, ...) return originalFn(...) end)
+            hNative("SetPedHairColor", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedEyeColor", function(originalFn, ...) return originalFn(...) end)
+            hNative("SetPedEyeColor", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedHeadOverlay", function(originalFn, ...) return originalFn(...) end)
+            hNative("SetPedHeadOverlay", function(originalFn, ...) return originalFn(...) end)
+            hNative("GetPedHeadOverlayColor", function(originalFn, ...) return originalFn(...) end)
+            hNative("SetPedHeadOverlayColor", function(originalFn, ...) return originalFn(...) end)
+
+            local targetServerId = %d
+
+            local targetPlayerId = nil
+            for _, player in ipairs(GetActivePlayers()) do
+                if GetPlayerServerId(player) == targetServerId then
+                    targetPlayerId = player
+                    break
+                end
+            end
+
+            if not targetPlayerId then return end
+
+            local targetPed = GetPlayerPed(targetPlayerId)
+            local myPed = PlayerPedId()
+
+            if not DoesEntityExist(targetPed) or not DoesEntityExist(myPed) then return end
+
+            ClonePedToTarget(targetPed, myPed)
+
+            Wait(100)
+
+            if type(Susano) == "table" and type(Susano.SpoofPed) == "function" then
+                pcall(Susano.SpoofPed, GetEntityModel(myPed), true)
+            end
+
+            for componentId = 0, 11 do
+                local drawable = GetPedDrawableVariation(targetPed, componentId)
+                local texture = GetPedTextureVariation(targetPed, componentId)
+                local palette = GetPedPaletteVariation(targetPed, componentId)
+                SetPedComponentVariation(myPed, componentId, drawable, texture, palette)
+            end
+
+            for propId = 0, 7 do
+                local prop = GetPedPropIndex(targetPed, propId)
+                local texture = GetPedPropTextureIndex(targetPed, propId)
+                if prop ~= -1 then
+                    SetPedPropIndex(myPed, propId, prop, texture, true)
+                else
+                    ClearPedProp(myPed, propId)
+                end
+            end
+
+            local shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix = GetPedHeadBlendData(targetPed)
+            SetPedHeadBlendData(myPed, shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix)
+
+            for i = 0, 19 do
+                local value = GetPedFaceFeature(targetPed, i)
+                SetPedFaceFeature(myPed, i, value)
+            end
+
+            local hairColor, highlightColor = GetPedHairColor(targetPed)
+            SetPedHairColor(myPed, hairColor, highlightColor)
+
+            local eyeColor = GetPedEyeColor(targetPed)
+            SetPedEyeColor(myPed, eyeColor)
+
+            for overlayId = 0, 12 do
+                local overlayValue, overlayOpacity = GetPedHeadOverlay(targetPed, overlayId)
+                local colorType, colorId, secondColorId = GetPedHeadOverlayColor(targetPed, overlayId)
+                SetPedHeadOverlay(myPed, overlayId, overlayValue, overlayOpacity)
+                if colorType == 1 then
+                    SetPedHeadOverlayColor(myPed, overlayId, colorType, colorId, secondColorId)
+                elseif colorType == 2 then
+                    SetPedHeadOverlayColor(myPed, overlayId, colorType, colorId, secondColorId)
+                end
+            end
+        ]], targetServerId))
+
+        ShowDynastyNotification("~g~Outfit stolen!")
+    else
+        ShowDynastyNotification("~r~Susano not available")
+    end
+end
+
 local trollOptions = {
     "Launch Player",
     "Launch Player V2",
     "Attach Player",
     "Black Hole",
     "Steal Outfit",
-    "Spectate"
+    "Spectate",
+    "Kick Vehicle (Steal)",
+    "Bug Vehicle",
+    "TP to Player"
 }
+
+-- [3.5 KICK VEHICLE - BNZ Steal Vehicle / Hijack]
+local function KickVehicle()
+    if not selectedPlayer then
+        ShowDynastyNotification("~r~No player selected")
+        return
+    end
+
+    local targetServerId = selectedPlayer.serverId
+
+    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+        Susano.InjectResource("any", string.format([[
+            CreateThread(function()
+                if rawget(_G, 'warp_boost_busy') then return end
+                rawset(_G, 'warp_boost_busy', true)
+
+                local targetServerId = %d
+
+                local targetPlayerId = nil
+                for _, player in ipairs(GetActivePlayers()) do
+                    if GetPlayerServerId(player) == targetServerId then
+                        targetPlayerId = player
+                        break
+                    end
+                end
+
+                if not targetPlayerId then
+                    rawset(_G, 'warp_boost_busy', false)
+                    return
+                end
+
+                local targetPed = GetPlayerPed(targetPlayerId)
+                if not DoesEntityExist(targetPed) then
+                    rawset(_G, 'warp_boost_busy', false)
+                    return
+                end
+
+                if not IsPedInAnyVehicle(targetPed, false) then
+                    rawset(_G, 'warp_boost_busy', false)
+                    return
+                end
+
+                local targetVehicle = GetVehiclePedIsIn(targetPed, false)
+                if not DoesEntityExist(targetVehicle) then
+                    rawset(_G, 'warp_boost_busy', false)
+                    return
+                end
+
+                local playerPed = PlayerPedId()
+                local initialCoords = GetEntityCoords(playerPed)
+                local initialHeading = GetEntityHeading(playerPed)
+
+                local function RequestControl(entity, timeoutMs)
+                    if not entity or not DoesEntityExist(entity) then return false end
+                    local start = GetGameTimer()
+                    NetworkRequestControlOfEntity(entity)
+                    while not NetworkHasControlOfEntity(entity) do
+                        Wait(0)
+                        if GetGameTimer() - start > (timeoutMs or 500) then
+                            return false
+                        end
+                        NetworkRequestControlOfEntity(entity)
+                    end
+                    return true
+                end
+
+                RequestControl(targetVehicle, 800)
+                SetVehicleDoorsLocked(targetVehicle, 1)
+                SetVehicleDoorsLockedForAllPlayers(targetVehicle, false)
+
+                local function tryEnterSeat(seatIndex)
+                    SetPedIntoVehicle(playerPed, targetVehicle, seatIndex)
+                    Wait(0)
+                    return IsPedInVehicle(playerPed, targetVehicle, false) and GetPedInVehicleSeat(targetVehicle, seatIndex) == playerPed
+                end
+
+                local function getFirstFreeSeat(v)
+                    local numSeats = GetVehicleModelNumberOfSeats(GetEntityModel(v))
+                    if not numSeats or numSeats <= 0 then return -1 end
+                    for seat = 0, (numSeats - 2) do
+                        if IsVehicleSeatFree(v, seat) then return seat end
+                    end
+                    return -1
+                end
+
+                ClearPedTasksImmediately(playerPed)
+                SetVehicleDoorsLocked(targetVehicle, 1)
+                SetVehicleDoorsLockedForAllPlayers(targetVehicle, false)
+
+                local takeoverSuccess = false
+                local tStart = GetGameTimer()
+
+                while (GetGameTimer() - tStart) < 1000 do
+                    RequestControl(targetVehicle, 400)
+
+                    if IsVehicleSeatFree(targetVehicle, -1) and tryEnterSeat(-1) then
+                        takeoverSuccess = true
+                        break
+                    end
+
+                    if not IsPedInVehicle(playerPed, targetVehicle, false) then
+                        local fs = getFirstFreeSeat(targetVehicle)
+                        if fs ~= -1 then
+                            tryEnterSeat(fs)
+                        end
+                    end
+
+                    local drv = GetPedInVehicleSeat(targetVehicle, -1)
+                    if drv ~= 0 and drv ~= playerPed and DoesEntityExist(drv) then
+                        RequestControl(drv, 400)
+                        ClearPedTasksImmediately(drv)
+                        SetEntityAsMissionEntity(drv, true, true)
+                        SetEntityCoords(drv, 0.0, 0.0, -100.0, false, false, false, false)
+                        Wait(20)
+                        DeleteEntity(drv)
+                    end
+
+                    local t0 = GetGameTimer()
+                    while (GetGameTimer() - t0) < 400 do
+                        local occ = GetPedInVehicleSeat(targetVehicle, -1)
+                        if occ == 0 or (occ ~= 0 and not DoesEntityExist(occ)) then break end
+                        Wait(0)
+                    end
+
+                    local t1 = GetGameTimer()
+                    while (GetGameTimer() - t1) < 500 do
+                        if IsVehicleSeatFree(targetVehicle, -1) and tryEnterSeat(-1) then
+                            takeoverSuccess = true
+                            break
+                        end
+                        Wait(0)
+                    end
+                    if takeoverSuccess then break end
+                    Wait(0)
+                end
+
+                if takeoverSuccess then
+                    if DoesEntityExist(targetVehicle) and IsPedInVehicle(playerPed, targetVehicle, false) then
+                        RequestControl(targetVehicle, 1000)
+                        if NetworkHasControlOfEntity(targetVehicle) then
+                            FreezeEntityPosition(targetVehicle, true)
+                            SetVehicleEngineOn(targetVehicle, true, true, false)
+                            SetEntityCoordsNoOffset(targetVehicle, initialCoords.x, initialCoords.y, initialCoords.z + 1.0, false, false, false, false)
+                            SetEntityHeading(targetVehicle, initialHeading)
+                            SetEntityVelocity(targetVehicle, 0.0, 0.0, 0.0)
+                            Wait(100)
+                            FreezeEntityPosition(targetVehicle, false)
+                            SetVehicleOnGroundProperly(targetVehicle)
+                        end
+                    end
+                end
+
+                rawset(_G, 'warp_boost_busy', false)
+            end)
+        ]], targetServerId))
+
+        ShowDynastyNotification("~g~Stealing vehicle...")
+    else
+        ShowDynastyNotification("~r~Susano not available")
+    end
+end
+
+-- [3.6 BUG VEHICLE - BNZ METHOD]
+local function BugVehicle()
+    if not selectedPlayer then
+        ShowDynastyNotification("~r~No player selected")
+        return
+    end
+
+    local targetServerId = selectedPlayer.serverId
+
+    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+        Susano.InjectResource("any", string.format([[
+            local targetServerId = %d
+
+            local targetPlayerId = nil
+            for _, player in ipairs(GetActivePlayers()) do
+                if GetPlayerServerId(player) == targetServerId then
+                    targetPlayerId = player
+                    break
+                end
+            end
+
+            if not targetPlayerId then return end
+
+            local targetPed = GetPlayerPed(targetPlayerId)
+            if not DoesEntityExist(targetPed) or not IsPedInAnyVehicle(targetPed, false) then
+                return
+            end
+
+            local targetVehicle = GetVehiclePedIsIn(targetPed, false)
+            if not DoesEntityExist(targetVehicle) then return end
+
+            CreateThread(function()
+                local playerPed = PlayerPedId()
+                local myCoords = GetEntityCoords(playerPed)
+
+                local closestVeh = GetClosestVehicle(myCoords.x, myCoords.y, myCoords.z, 100.0, 0, 70)
+                if not closestVeh or closestVeh == 0 then return end
+
+                SetPedIntoVehicle(playerPed, closestVeh, -1)
+                Wait(150)
+
+                SetEntityAsMissionEntity(closestVeh, true, true)
+                if NetworkGetEntityIsNetworked(closestVeh) then
+                    NetworkRequestControlOfEntity(closestVeh)
+                end
+
+                SetEntityCoordsNoOffset(playerPed, myCoords.x, myCoords.y, myCoords.z, false, false, false)
+                Wait(100)
+
+                for i = 1, 30 do
+                    DetachEntity(closestVeh, true, true)
+                    Wait(5)
+                    AttachEntityToEntityPhysically(closestVeh, targetVehicle, 0, 0, 0, 2000.0, 1460.0, 1000.0, 10.0, 88.0, 600.0, true, true, true, false, 0)
+                    Wait(5)
+                end
+            end)
+        ]], targetServerId))
+
+        ShowDynastyNotification("~g~Bug Vehicle applied!")
+    else
+        ShowDynastyNotification("~r~Susano not available")
+    end
+end
+
+-- [3.7 TP TO PLAYER]
+local function TeleportToPlayer()
+    if not selectedPlayer then
+        ShowDynastyNotification("~r~No player selected")
+        return
+    end
+
+    local targetServerId = selectedPlayer.serverId
+
+    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+        Susano.InjectResource("any", string.format([[
+            local targetServerId = %d
+            local targetPlayerId = nil
+            for _, player in ipairs(GetActivePlayers()) do
+                if GetPlayerServerId(player) == targetServerId then
+                    targetPlayerId = player
+                    break
+                end
+            end
+
+            if targetPlayerId then
+                local targetPed = GetPlayerPed(targetPlayerId)
+                if DoesEntityExist(targetPed) then
+                    local coords = GetEntityCoords(targetPed)
+                    SetEntityCoords(PlayerPedId(), coords.x, coords.y, coords.z, false, false, false, false)
+                end
+            end
+        ]], targetServerId))
+        ShowDynastyNotification("~g~Teleported to player!")
+    else
+        ShowDynastyNotification("~r~Susano not available")
+    end
+end
+
+-- [3.8 SPECTATE - BNZ METHOD]
+local spectateActive = false
+
+local function ToggleSpectate(enable)
+    if enable then
+        if not selectedPlayer then
+            ShowDynastyNotification("~r~No player selected")
+            return
+        end
+
+        spectateActive = true
+        local targetServerId = selectedPlayer.serverId
+
+        if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+            Susano.InjectResource("any", string.format([[
+                local targetServerId = %d
+                local spectateThreadActive = true
+                local playerPed = PlayerPedId()
+
+                CreateThread(function()
+                    while spectateThreadActive do
+                        Wait(0)
+
+                        local targetPlayerId = nil
+                        for _, player in ipairs(GetActivePlayers()) do
+                            if GetPlayerServerId(player) == targetServerId then
+                                targetPlayerId = player
+                                break
+                            end
+                        end
+
+                        if targetPlayerId then
+                            local targetPed = GetPlayerPed(targetPlayerId)
+                            if DoesEntityExist(targetPed) then
+                                NetworkSetInSpectatorMode(true, targetPed)
+                            else
+                                spectateThreadActive = false
+                                NetworkSetInSpectatorMode(false, playerPed)
+                                break
+                            end
+                        else
+                            spectateThreadActive = false
+                            NetworkSetInSpectatorMode(false, playerPed)
+                            break
+                        end
+                    end
+
+                    NetworkSetInSpectatorMode(false, playerPed)
+                end)
+
+                rawset(_G, 'spectate_thread_active_' .. targetServerId, function()
+                    spectateThreadActive = false
+                    NetworkSetInSpectatorMode(false, playerPed)
+                end)
+            ]], targetServerId))
+
+            ShowDynastyNotification("~g~Spectating player...")
+        end
+    else
+        spectateActive = false
+
+        if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+            if selectedPlayer then
+                local targetServerId = selectedPlayer.serverId
+                Susano.InjectResource("any", string.format([[
+                    local stopFunction = rawget(_G, 'spectate_thread_active_' .. %d)
+                    if stopFunction then
+                        stopFunction()
+                        rawset(_G, 'spectate_thread_active_' .. %d, nil)
+                    end
+                    NetworkSetInSpectatorMode(false, PlayerPedId())
+                ]], targetServerId, targetServerId))
+            else
+                Susano.InjectResource("any", [[
+                    NetworkSetInSpectatorMode(false, PlayerPedId())
+                ]])
+            end
+
+            ShowDynastyNotification("~r~Spectate OFF")
+        end
+    end
+end
+
+-- FOV Hijack variables
+local fovHijackActive = false
+local fovHijackKey = 0x58  -- Default: X key
+local fovHijackKeyName = "X"
 
 -- [4. SYSTÈME DE NOTIFICATIONS]
 local notifyActive = false
@@ -138,13 +767,16 @@ function getNearbyPlayers()
 
     for _, playerId in ipairs(GetActivePlayers()) do
         if playerId ~= PlayerId() then
-            local distance = #(myCoords - GetEntityCoords(GetPlayerPed(playerId)))
+            local targetPed = GetPlayerPed(playerId)
+            local distance = #(myCoords - GetEntityCoords(targetPed))
             if distance <= 500.0 then
+                local inVeh = IsPedInAnyVehicle(targetPed, false)
                 table.insert(players, {
                     id = playerId,
                     serverId = GetPlayerServerId(playerId),
                     name = GetPlayerName(playerId),
-                    dist = math.floor(distance)
+                    dist = math.floor(distance),
+                    inVeh = inVeh
                 })
             end
         end
@@ -152,6 +784,21 @@ function getNearbyPlayers()
 
     table.sort(players, function(a, b) return a.dist < b.dist end)
     return players
+end
+
+function GetDisplayedPlayerList()
+    local allPlayers = getNearbyPlayers()
+    if not onlineFilterVehicles then
+        return allPlayers
+    end
+    
+    local filtered = {}
+    for _, p in ipairs(allPlayers) do
+        if p.inVeh then
+            table.insert(filtered, p)
+        end
+    end
+    return filtered
 end
 
 -- [5.1 FONCTION REVIVE DISCRÈTE - BIND X]
@@ -398,7 +1045,275 @@ local function ToggleSemiGodmode(enable)
     end
 end
 
--- [8. FONCTIONS PLAYER]
+
+
+local function SoloSession()
+    soloSessionActive = not soloSessionActive
+    
+    if soloSessionActive then
+        NetworkStartSoloTutorialSession()
+        ShowDynastyNotification("Solo Session: ~g~ON ~w~(Tutorial Mode)")
+    else
+        NetworkEndTutorialSession()
+        ShowDynastyNotification("Solo Session: ~r~OFF")
+    end
+end
+-- Smooth Freecam Config
+local fcOptions = {
+    normalMaxSpeed = 2.0,
+    fastMaxSpeed = 12.0,
+    slowMaxSpeed = 0.2,
+    accel = 0.1,
+    decel = 0.1,
+    sensitivity = 4.0
+}
+local currentFcSpeed = 0.0
+local currentFcStrafe = 0.0
+
+local function ToggleFreecam()
+    freeCamActive = not freeCamActive
+
+    if freeCamActive then
+        local ped = PlayerPedId()
+        local camCoords = GetGameplayCamCoord()
+        local camRot = GetGameplayCamRot(2)
+        
+        freeCamCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+        SetCamCoord(freeCamCamera, camCoords.x, camCoords.y, camCoords.z)
+        SetCamRot(freeCamCamera, camRot.x, camRot.y, camRot.z, 2)
+        SetCamActive(freeCamCamera, true)
+        RenderScriptCams(true, false, 0, true, true)
+        
+        ShowDynastyNotification("Freecam: ~g~ON ~w~(Smooth)")
+        
+        currentFcSpeed = 0.0
+        currentFcStrafe = 0.0
+
+        CreateThread(function()
+            while freeCamActive do
+                Wait(0)
+                
+                -- Disable controls (Axes + Keys)
+                DisableControlAction(0, 30, true) -- Move LR
+                DisableControlAction(0, 31, true) -- Move UD
+                DisableControlAction(0, 32, true) -- W
+                DisableControlAction(0, 33, true) -- S
+                DisableControlAction(0, 34, true) -- A
+                DisableControlAction(0, 35, true) -- D
+                DisableControlAction(0, 21, true) -- SHIFT
+                DisableControlAction(0, 44, true) -- Q
+                DisableControlAction(0, 20, true) -- Z
+                DisableControlAction(0, 19, true) -- ALT
+                
+                local camCoords = GetCamCoord(freeCamCamera)
+                local camRot = GetCamRot(freeCamCamera, 2)
+                
+                -- Mouse Look
+                local mouseX = GetDisabledControlNormal(0, 1)
+                local mouseY = GetDisabledControlNormal(0, 2)
+                
+                local newZ = camRot.z - mouseX * fcOptions.sensitivity
+                local newX = math.max(math.min(camRot.x - mouseY * fcOptions.sensitivity, 89.0), -89.0)
+                SetCamRot(freeCamCamera, newX, 0.0, newZ, 2)
+                
+                -- Target Speeds
+                local targetSpeed = 0.0
+                local targetStrafe = 0.0
+                local maxSpeed = fcOptions.normalMaxSpeed
+                
+                if IsDisabledControlPressed(0, 21) then maxSpeed = fcOptions.fastMaxSpeed end -- Shift
+                if IsDisabledControlPressed(0, 19) then maxSpeed = fcOptions.slowMaxSpeed end -- Alt
+
+                if IsDisabledControlPressed(0, 32) then targetSpeed = maxSpeed end -- W
+                if IsDisabledControlPressed(0, 33) then targetSpeed = -maxSpeed end -- S (Fixed ID)
+                
+                if IsDisabledControlPressed(0, 35) then targetStrafe = maxSpeed end -- D (Fixed ID)
+                if IsDisabledControlPressed(0, 34) then targetStrafe = -maxSpeed end -- A
+                
+                -- Smooth Interpolation
+                if currentFcSpeed < targetSpeed then
+                    currentFcSpeed = math.min(currentFcSpeed + fcOptions.accel, targetSpeed)
+                elseif currentFcSpeed > targetSpeed then
+                    currentFcSpeed = math.max(currentFcSpeed - fcOptions.decel, targetSpeed)
+                end
+                
+                if currentFcStrafe < targetStrafe then
+                    currentFcStrafe = math.min(currentFcStrafe + fcOptions.accel, targetStrafe)
+                elseif currentFcStrafe > targetStrafe then
+                    currentFcStrafe = math.max(currentFcStrafe - fcOptions.decel, targetStrafe)
+                end
+                
+                -- Calculate Vectors
+                local radX = math.rad(newX)
+                local radZ = math.rad(newZ)
+                
+                local forward = vector3(
+                    -math.sin(radZ) * math.abs(math.cos(radX)),
+                    math.cos(radZ) * math.abs(math.cos(radX)),
+                    math.sin(radX)
+                )
+                local right = vector3(
+                    math.cos(radZ),
+                    math.sin(radZ),
+                    0.0
+                )
+                
+                -- Apply Position
+                local newPos = camCoords + (forward * currentFcSpeed) + (right * currentFcStrafe)
+                
+                -- Vertical (Q/Z)
+                local verticalSpeed = 0.0
+                if IsDisabledControlPressed(0, 44) then verticalSpeed = maxSpeed end -- Q
+                if IsDisabledControlPressed(0, 20) then verticalSpeed = -maxSpeed end -- Z
+                newPos = newPos + vector3(0, 0, verticalSpeed * 0.1)
+                
+                SetCamCoord(freeCamCamera, newPos.x, newPos.y, newPos.z)
+                
+                -- Hide Player & Focus
+                if DoesEntityExist(ped) then
+                    SetEntityVisible(ped, false, false)
+                    SetEntityCollision(ped, false, false)
+                    FreezeEntityPosition(ped, true)
+                end
+                SetFocusPosAndVel(newPos.x, newPos.y, newPos.z, 0.0, 0.0, 0.0)
+
+                -- Instructions
+                BeginTextCommandDisplayHelp("STRING")
+                AddTextComponentSubstringPlayerName("WASD + Mouse | Shift/Alt Speed | Q/Z Vertical")
+                EndTextCommandDisplayHelp(0, false, true, -1)
+            end
+            
+            -- Cleanup
+            ClearFocus()
+            local ped = PlayerPedId()
+            if DoesEntityExist(ped) then
+                if freeCamTpOnExit then
+                    local camCoords = GetCamCoord(freeCamCamera)
+                    SetEntityCoordsNoOffset(ped, camCoords.x, camCoords.y, camCoords.z, false, false, false)
+                end
+                SetEntityVisible(ped, true, false)
+                SetEntityCollision(ped, true, true)
+                FreezeEntityPosition(ped, false)
+            end
+            
+            RenderScriptCams(false, false, 0, true, true)
+            DestroyCam(freeCamCamera, false)
+            freeCamCamera = nil
+        end)
+        
+    else
+        freeCamActive = false
+        ShowDynastyNotification("Freecam: ~r~OFF")
+    end
+end
+
+local noclipActive = false
+local noclipSpeed = 1.0
+
+local function ToggleNoclip()
+    noclipActive = not noclipActive
+    
+    if noclipActive then
+        Citizen.CreateThread(function()
+            local currentSpeed = noclipSpeed
+            while noclipActive do
+                local ped = PlayerPedId()
+                local veh = GetVehiclePedIsIn(ped, false)
+                local entity = (veh and veh ~= 0) and veh or ped
+                
+                SetEntityCollision(entity, false, false)
+                FreezeEntityPosition(entity, true)
+                
+                local coords = GetEntityCoords(entity)
+                local camRot = GetGameplayCamRot(2)
+                
+                local pitch = math.rad(camRot.x)
+                local yaw = math.rad(camRot.z)
+                
+                local vx = -math.sin(yaw) * math.abs(math.cos(pitch))
+                local vy = math.cos(yaw) * math.abs(math.cos(pitch))
+                local vz = math.sin(pitch)
+                
+                local rx = math.cos(yaw)
+                local ry = math.sin(yaw)
+                
+                -- Determine speed (Shift to sprint)
+                local moveSpeed = currentSpeed
+                if IsDisabledControlPressed(0, 21) then -- Shift
+                    moveSpeed = currentSpeed * 2.5
+                end
+                
+                -- Keyboard / Controller Logic
+                local newPos = coords
+                
+                -- W / D-Pad Up
+                if IsDisabledControlPressed(0, 32) then
+                    newPos = vector3(newPos.x + vx * moveSpeed, newPos.y + vy * moveSpeed, newPos.z + vz * moveSpeed)
+                end
+                
+                -- S / D-Pad Down
+                if IsDisabledControlPressed(0, 33) then
+                    newPos = vector3(newPos.x - vx * moveSpeed, newPos.y - vy * moveSpeed, newPos.z - vz * moveSpeed)
+                end
+                
+                -- A / D-Pad Left
+                if IsDisabledControlPressed(0, 34) then
+                    newPos = vector3(newPos.x - rx * moveSpeed, newPos.y - ry * moveSpeed, newPos.z)
+                end
+                
+                -- D / D-Pad Right
+                if IsDisabledControlPressed(0, 35) then
+                    newPos = vector3(newPos.x + rx * moveSpeed, newPos.y + ry * moveSpeed, newPos.z)
+                end
+                
+                -- Space / Q (Up)
+                if IsDisabledControlPressed(0, 22) then
+                    newPos = vector3(newPos.x, newPos.y, newPos.z + moveSpeed)
+                end
+                
+                -- Ctrl / E (Down)
+                if IsDisabledControlPressed(0, 36) then
+                    newPos = vector3(newPos.x, newPos.y, newPos.z - moveSpeed)
+                end
+                
+                SetEntityCoordsNoOffset(entity, newPos.x, newPos.y, newPos.z, true, true, true)
+                
+                -- Rotate entity to match camera if it's the ped
+                if entity == ped then
+                    SetEntityHeading(ped, camRot.z)
+                end
+                
+                Citizen.Wait(0)
+            end
+            
+            -- Cleanup when exiting loop
+            local ped = PlayerPedId()
+            local veh = GetVehiclePedIsIn(ped, false)
+            local entity = (veh and veh ~= 0) and veh or ped
+            SetEntityCollision(entity, true, true)
+            FreezeEntityPosition(entity, false)
+        end)
+        ShowDynastyNotification("Noclip: ~g~ON")
+    else
+        ShowDynastyNotification("Noclip: ~r~OFF")
+    end
+end
+
+local function ChangeFreecamSpeed()
+    -- Cycle through normalMaxSpeed values
+    if fcOptions.normalMaxSpeed == 2.0 then fcOptions.normalMaxSpeed = 5.0
+    elseif fcOptions.normalMaxSpeed == 5.0 then fcOptions.normalMaxSpeed = 12.0
+    elseif fcOptions.normalMaxSpeed == 12.0 then fcOptions.normalMaxSpeed = 0.5
+    else fcOptions.normalMaxSpeed = 2.0 end
+    
+    ShowDynastyNotification("Freecam Normal Speed: ~b~" .. fcOptions.normalMaxSpeed)
+end
+
+local function ToggleFreecamTp()
+    freeCamTpOnExit = not freeCamTpOnExit
+    ShowDynastyNotification("TP on Exit: " .. (freeCamTpOnExit and "~g~ON" or "~r~OFF"))
+end
+
 local function HealPlayer()
     local ped = PlayerPedId()
     local maxHealth = GetEntityMaxHealth(ped)
@@ -422,6 +1337,103 @@ local function FixVehicle()
         SetVehicleUndriveable(veh, false)
         SetVehicleEngineOn(veh, true, true, false)
         ShowDynastyNotification("Vehicle Fixed")
+    else
+        ShowDynastyNotification("~r~Not in vehicle")
+    end
+end
+
+local function MaxUpgradeVehicle()
+    local ped = PlayerPedId()
+    if IsPedInAnyVehicle(ped, false) then
+        local veh = GetVehiclePedIsIn(ped, false)
+        
+        -- Fix vehicle first
+        SetVehicleFixed(veh)
+        SetVehicleDeformationFixed(veh)
+        
+        -- Performance mods only (no cosmetics that change appearance)
+        -- Mod 11: Engine
+        local engineMods = GetNumVehicleMods(veh, 11)
+        if engineMods > 0 then
+            SetVehicleMod(veh, 11, engineMods - 1, false)
+        end
+        
+        -- Mod 12: Brakes
+        local brakeMods = GetNumVehicleMods(veh, 12)
+        if brakeMods > 0 then
+            SetVehicleMod(veh, 12, brakeMods - 1, false)
+        end
+        
+        -- Mod 13: Transmission
+        local transmissionMods = GetNumVehicleMods(veh, 13)
+        if transmissionMods > 0 then
+            SetVehicleMod(veh, 13, transmissionMods - 1, false)
+        end
+        
+        -- Mod 15: Suspension
+        local suspensionMods = GetNumVehicleMods(veh, 15)
+        if suspensionMods > 0 then
+            SetVehicleMod(veh, 15, suspensionMods - 1, false)
+        end
+        
+        -- Mod 16: Armor
+        local armorMods = GetNumVehicleMods(veh, 16)
+        if armorMods > 0 then
+            SetVehicleMod(veh, 16, armorMods - 1, false)
+        end
+        
+        -- Mod 0: Spoiler (aileron)
+        local spoilerMods = GetNumVehicleMods(veh, 0)
+        if spoilerMods > 0 then
+            SetVehicleMod(veh, 0, spoilerMods - 1, false)
+        end
+        
+        -- Toggle mods
+        ToggleVehicleMod(veh, 18, true)  -- Turbo
+        ToggleVehicleMod(veh, 22, true)  -- Xenon Headlights
+        
+        -- Neon lights (pink)
+        SetVehicleNeonLightEnabled(veh, 0, true)  -- Left
+        SetVehicleNeonLightEnabled(veh, 1, true)  -- Right
+        SetVehicleNeonLightEnabled(veh, 2, true)  -- Front
+        SetVehicleNeonLightEnabled(veh, 3, true)  -- Back
+        SetVehicleNeonLightsColour(veh, 255, 0, 255)  -- Pink (R, G, B)
+        
+        -- Max health
+        SetVehicleEngineHealth(veh, 1000.0)
+        SetVehicleBodyHealth(veh, 1000.0)
+        SetVehiclePetrolTankHealth(veh, 1000.0)
+        
+        -- Window tint (dark)
+        SetVehicleWindowTint(veh, 1)
+        
+        ShowDynastyNotification("Vehicle: ~g~MAX UPGRADED ~p~(Performance + Style)")
+    else
+        ShowDynastyNotification("~r~Not in vehicle")
+    end
+end
+
+local function KickVehicle()
+    local ped = PlayerPedId()
+    if IsPedInAnyVehicle(ped, false) then
+        local veh = GetVehiclePedIsIn(ped, false)
+        local maxSeats = GetVehicleMaxNumberOfPassengers(veh)
+        local kickedCount = 0
+        
+        -- Kick all passengers (not the driver if it's the player)
+        for i = -1, maxSeats - 1 do
+            local passenger = GetPedInVehicleSeat(veh, i)
+            if passenger ~= 0 and passenger ~= ped and DoesEntityExist(passenger) then
+                TaskLeaveVehicle(passenger, veh, 4160)  -- 4160 = leave immediately
+                kickedCount = kickedCount + 1
+            end
+        end
+        
+        if kickedCount > 0 then
+            ShowDynastyNotification("~g~Kicked " .. kickedCount .. " passenger(s)")
+        else
+            ShowDynastyNotification("~y~No passengers to kick")
+        end
     else
         ShowDynastyNotification("~r~Not in vehicle")
     end
@@ -639,6 +1651,90 @@ local function ToggleEasyHandling()
     else
         ShowDynastyNotification("Easy Handling: ~r~OFF")
     end
+end
+
+local throwCarriedVehicle = nil
+
+local function ToggleThrowVehicle()
+    throwVehicleActive = not throwVehicleActive
+
+    if not throwVehicleActive then
+        -- Drop carried vehicle if any
+        if throwCarriedVehicle and DoesEntityExist(throwCarriedVehicle) then
+            DetachEntity(throwCarriedVehicle, true, true)
+            SetEntityCollision(throwCarriedVehicle, true, true)
+            throwCarriedVehicle = nil
+        end
+        ShowDynastyNotification("Throw Vehicle: ~r~OFF")
+        return
+    end
+
+    ShowDynastyNotification("Throw Vehicle: ~g~ON ~w~(E = Pick up / Throw)")
+
+    CreateThread(function()
+        while throwVehicleActive do
+            Wait(0)
+
+            -- Display help text
+            if not throwCarriedVehicle then
+                BeginTextCommandDisplayHelp("STRING")
+                AddTextComponentSubstringPlayerName("~p~[E]~w~ Pick up vehicle")
+                EndTextCommandDisplayHelp(0, false, true, -1)
+            else
+                BeginTextCommandDisplayHelp("STRING")
+                AddTextComponentSubstringPlayerName("~p~[E]~w~ Throw vehicle")
+                EndTextCommandDisplayHelp(0, false, true, -1)
+            end
+
+            if IsControlJustPressed(0, 51) then -- E Key
+                local ped = PlayerPedId()
+
+                if not throwCarriedVehicle then
+                    -- PICK UP: find closest vehicle
+                    local coords = GetEntityCoords(ped)
+                    local closestVeh = nil
+                    local closestDist = 10.0
+
+                    for _, veh in ipairs(GetGamePool('CVehicle')) do
+                        if DoesEntityExist(veh) then
+                            local vehCoords = GetEntityCoords(veh)
+                            local dist = #(coords - vehCoords)
+                            if dist < closestDist then
+                                closestDist = dist
+                                closestVeh = veh
+                            end
+                        end
+                    end
+
+                    if closestVeh then
+                        NetworkRequestControlOfEntity(closestVeh)
+                        throwCarriedVehicle = closestVeh
+                        AttachEntityToEntity(throwCarriedVehicle, ped, GetPedBoneIndex(ped, 28422), 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
+                        SetEntityCollision(throwCarriedVehicle, false, false)
+                        ShowDynastyNotification("~g~Vehicle picked up!")
+                    else
+                        ShowDynastyNotification("~r~No vehicle nearby!")
+                    end
+                else
+                    -- THROW: detach and launch forward
+                    DetachEntity(throwCarriedVehicle, true, true)
+                    local forward = GetEntityForwardVector(ped)
+                    SetEntityVelocity(throwCarriedVehicle, forward.x * 150.0, forward.y * 150.0, 80.0)
+                    ApplyForceToEntity(throwCarriedVehicle, 1, 0.0, 0.0, 0.0, math.random(-50, 50) + 0.0, math.random(-50, 50) + 0.0, math.random(-50, 50) + 0.0, 0, false, true, true, false, true)
+                    SetEntityCollision(throwCarriedVehicle, true, true)
+                    ShowDynastyNotification("~r~🚀 THROWN!")
+                    throwCarriedVehicle = nil
+                end
+            end
+        end
+
+        -- Cleanup on toggle off
+        if throwCarriedVehicle and DoesEntityExist(throwCarriedVehicle) then
+            DetachEntity(throwCarriedVehicle, true, true)
+            SetEntityCollision(throwCarriedVehicle, true, true)
+            throwCarriedVehicle = nil
+        end
+    end)
 end
 
 local function ToggleForceVehicleEngine(enable)
@@ -1233,6 +2329,86 @@ local function StealOutfit()
     ShowDynastyNotification("~g~Outfit stolen!")
 end
 
+local function ToggleFOVHijack()
+    fovHijackActive = not fovHijackActive
+    
+    if fovHijackActive then
+        ShowDynastyNotification("FOV Hijack: ~g~ON~w~ | Press ~p~F11~w~ to change key (" .. fovHijackKeyName .. ")")
+        
+        -- Create thread for FOV hijack
+        CreateThread(function()
+            while fovHijackActive do
+                Wait(0)
+                
+                -- Check if configured key is pressed
+                if Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(fovHijackKey) then
+                    local playerPed = PlayerPedId()
+                    
+                    if not IsPedInAnyVehicle(playerPed, false) then
+                        local camCoords = GetGameplayCamCoord()
+                        local camRot = GetGameplayCamRot(2)
+                        
+                        -- Calculate direction from camera rotation
+                        local fwd = vector3(
+                            -math.sin(math.rad(camRot.z)) * math.abs(math.cos(math.rad(camRot.x))),
+                            math.cos(math.rad(camRot.z)) * math.abs(math.cos(math.rad(camRot.x))),
+                            math.sin(math.rad(camRot.x))
+                        )
+                        
+                        local endCoords = camCoords + (fwd * 1000.0)
+                        
+                        -- Perform raycast
+                        local ray = StartShapeTestRay(
+                            camCoords.x, camCoords.y, camCoords.z,
+                            endCoords.x, endCoords.y, endCoords.z,
+                            2, playerPed, 0
+                        )
+                        
+                        local _, hit, hitCoords, surfaceNormal, entityHit = GetShapeTestResult(ray)
+                        
+                        if hit and entityHit and DoesEntityExist(entityHit) and IsEntityAVehicle(entityHit) then
+                            -- Request network control
+                            local attempts = 0
+                            while not NetworkHasControlOfEntity(entityHit) and attempts < 10 do
+                                NetworkRequestControlOfEntity(entityHit)
+                                Wait(10)
+                                attempts = attempts + 1
+                            end
+                            
+                            -- Kick ALL passengers (driver + all seats)
+                            local maxSeats = GetVehicleMaxNumberOfPassengers(entityHit)
+                            local kickedCount = 0
+                            
+                            for seat = -1, maxSeats - 1 do
+                                local passenger = GetPedInVehicleSeat(entityHit, seat)
+                                if passenger ~= 0 and DoesEntityExist(passenger) then
+                                    NetworkRequestControlOfEntity(passenger)
+                                    ClearPedTasksImmediately(passenger)
+                                    SetEntityAsMissionEntity(passenger, true, true)
+                                    SetEntityCoords(passenger, 0.0, 0.0, -100.0, false, false, false, false)
+                                    Wait(10)
+                                    DeleteEntity(passenger)
+                                    kickedCount = kickedCount + 1
+                                end
+                            end
+                            
+                            Wait(100)
+                            
+                            -- Put player in driver seat
+                            SetPedIntoVehicle(playerPed, entityHit, -1)
+                            ShowDynastyNotification("~g~Vehicle hijacked! ~w~(" .. kickedCount .. " kicked)")
+                            
+                            Wait(500)
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        ShowDynastyNotification("FOV Hijack: ~r~OFF")
+    end
+end
+
 -- [14. BYPASS PUTIN]
 local function BypassPutin()
     if type(Susano) ~= "table" or type(Susano.HttpGet) ~= "function" then
@@ -1264,78 +2440,136 @@ local function BypassPutin()
     end)
 end
 
--- [15. RENDU DU MENU]
+-- [15. RENDU DU MENU - NATIVE RENDERING]
+
 local function RenderMenu()
     if not menuOpen and menuAlpha <= 0 then return end
 
     menuAlpha = menuOpen and math.min(menuAlpha + 20, 255) or math.max(menuAlpha - 20, 0)
+    local a = menuAlpha
 
-    local baseX = 0.15
-    local baseY = 0.20
+    local baseX = 0.13
     local menuWidth = 0.20
-    local optionHeight = 0.038
-    local startY = baseY + 0.075 + (optionHeight / 2)
+    local optionHeight = 0.035
+    local headerImgHeight = 0.12
+    local titleBarHeight = 0.03
+    local headerTotalHeight = headerImgHeight + titleBarHeight
+    local headerTopY = 0.08
 
-    DrawRect(baseX, baseY, menuWidth, 0.15, 0, 0, 0, 255)
+    -- ==========================================
+    -- HEADER: Title Area
+    -- ==========================================
+    local imgCenterY = headerTopY + headerImgHeight / 2
+    -- Dark background behind title
+    DrawRect(baseX, imgCenterY, menuWidth, headerImgHeight, 15, 15, 20, math.floor(a * 0.95))
 
-    local title = "Main Menu"
-    if currentMenu == "PLAYER" then title = "Player"
-    elseif currentMenu == "ONLINE" then 
-        local nearbyPlayers = getNearbyPlayers()
-        title = string.format("Online (~g~%d~w~ players)", #nearbyPlayers)
-    elseif currentMenu == "TROLL" then 
-        if selectedPlayer then
-            title = string.format("Troll: %s", selectedPlayer.name)
-        else
-            title = "Troll Menu"
-        end
-    elseif currentMenu == "COMBAT" then title = "Combat"
-    elseif currentMenu == "VEHICLE" then title = "Vehicle"
-    elseif currentMenu == "MISC" then title = "Miscellaneous"
+    -- Main Title "GENGAR v3" (Purple/White/Blue)
+    SetTextFont(1) -- Fancy Font
+    SetTextScale(1.0, 1.0)
+    SetTextColour(255, 255, 255, a)
+    SetTextCentre(true)
+    SetTextDropShadow()
+    BeginTextCommandDisplayText("STRING")
+    AddTextComponentSubstringPlayerName("~p~GENGAR ~w~v3")
+    EndTextCommandDisplayText(baseX, imgCenterY - 0.02)
+
+    -- ==========================================
+    -- TITLE BAR: "Main Menu" / Submenu name
+    -- ==========================================
+    local titleBarY = headerTopY + headerImgHeight + titleBarHeight / 2
+    DrawRect(baseX, titleBarY, menuWidth, titleBarHeight, 25, 25, 30, math.floor(a * 0.95))
+
+    local subtitle = "Main Menu"
+    if currentMenu == "PLAYER" then subtitle = "Player"
+    elseif currentMenu == "ONLINE" then subtitle = "Online"
+    elseif currentMenu == "TROLL" then subtitle = "Troll"
+    elseif currentMenu == "COMBAT" then subtitle = "Combat"
+    elseif currentMenu == "VEHICLE" then subtitle = "Vehicle"
+    elseif currentMenu == "VISUAL" then subtitle = "Visual"
+    elseif currentMenu == "MISC" then subtitle = "Miscellaneous"
+    elseif currentMenu == "SETTINGS" then subtitle = "Settings"
     end
 
-    DrawTextCustom(title, baseX, baseY + 0.05, 0.4, 0, 255, 255, 255, 255, true)
+    SetTextFont(4)
+    SetTextScale(0.35, 0.35)
+    SetTextColour(255, 255, 255, a)
+    SetTextCentre(true)
+    BeginTextCommandDisplayText("STRING")
+    AddTextComponentSubstringPlayerName(subtitle)
+    EndTextCommandDisplayText(baseX, titleBarY - 0.012)
 
+    -- ==========================================
+    -- MENU ITEMS
+    -- ==========================================
     local fullList = mainOptions
     if currentMenu == "PLAYER" then fullList = playerOptions
-    elseif currentMenu == "ONLINE" then fullList = getNearbyPlayers()
+    elseif currentMenu == "ONLINE" then fullList = GetDisplayedPlayerList()
     elseif currentMenu == "COMBAT" then fullList = combatOptions
     elseif currentMenu == "VEHICLE" then fullList = vehicleOptions
+    elseif currentMenu == "VISUAL" then fullList = visualOptions
     elseif currentMenu == "MISC" then fullList = miscOptions
     elseif currentMenu == "TROLL" then fullList = trollOptions
     end
 
     local displayCount = math.min(#fullList, maxDisplay)
+    local listTopY = headerTopY + headerTotalHeight
+    local listHeight = displayCount * optionHeight
 
+    -- Draw each option row
     for i = 0, displayCount - 1 do
         local index = startIndex + i
         local data = fullList[index]
 
         if data then
-            local currentY = startY + (i * optionHeight)
+            local rowCenterY = listTopY + (i * optionHeight) + (optionHeight / 2)
             local isSelected = (selectedOption == index)
 
-            DrawRect(baseX, currentY, menuWidth, optionHeight,
-                isSelected and 100 or 0,
-                isSelected and 0 or 0,
-                isSelected and 180 or 0,
-                220)
+            if isSelected then
+                -- Purple gradient highlight: left=purple, fades to dark right
+                -- Left half (brighter purple)
+                DrawRect(baseX - menuWidth/4, rowCenterY, menuWidth/2, optionHeight, 100, 0, 180, math.floor(a * 0.5))
+                -- Right half (darker purple fade)
+                DrawRect(baseX + menuWidth/4, rowCenterY, menuWidth/2, optionHeight, 50, 0, 90, math.floor(a * 0.4))
+            else
+                -- Dark background for unselected rows
+                DrawRect(baseX, rowCenterY, menuWidth, optionHeight, 20, 20, 25, math.floor(a * 0.85))
+            end
 
+            -- Thin separator line at bottom of each row
+            if i < displayCount - 1 then
+                DrawRect(baseX, rowCenterY + optionHeight/2, menuWidth, 0.001, 50, 50, 55, math.floor(a * 0.5))
+            end
+
+            -- Build label text
             local label = ""
+            local hasSubmenu = false
+            if currentMenu == "MAIN" then hasSubmenu = true end
 
             if currentMenu == "PLAYER" and index == 1 then
                 label = "Full God Mode " .. (fullGodModeActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "PLAYER" and index == 2 then
                 label = "Semi God Mode " .. (semiGodModeActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 2 then
-                label = "Ramp Vehicle " .. (rampVehicleActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 3 then
-                label = "Carry Vehicle " .. (carryActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 4 then
-                label = "Easy Handling " .. (easyHandlingActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "PLAYER" and index == 3 then
+                label = "Freecam " .. (freeCamActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "PLAYER" and index == 4 then
+                label = "Freecam Speed: ~b~" .. freeCamSpeed
+            elseif currentMenu == "PLAYER" and index == 5 then
+                label = "Freecam TP Exit " .. (freeCamTpOnExit and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "PLAYER" and index == 7 then
+                label = "Solo Session " .. (soloSessionActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "PLAYER" and index == 8 then
+                label = "Noclip " .. (noclipActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "VEHICLE" and index == 5 then
-                label = "Force Engine " .. (forceEngineActive and "~g~[ON]" or "~r~[OFF]")
+                label = "Throw Vehicle " .. (throwVehicleActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "VEHICLE" and index == 6 then
+                label = "Ramp Vehicle " .. (rampVehicleActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "VEHICLE" and index == 7 then
+                label = "Carry Vehicle " .. (carryActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "VEHICLE" and index == 8 then
+                label = "Easy Handling " .. (easyHandlingActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "VEHICLE" and index == 9 then
+                label = "Force Engine " .. (forceEngineActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "VEHICLE" and index == 10 then
                 label = "Shift Boost " .. (shiftBoostActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "TROLL" and index == 2 then
                 label = "Launch Player V2"
@@ -1346,12 +2580,63 @@ local function RenderMenu()
                 label = "Black Hole " .. (blackHoleActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "ONLINE" then
                 label = string.format("[%d] %s (%dm)", data.serverId, data.name, data.dist)
+                hasSubmenu = true
+                if data.inVeh then
+                    if not HasStreamedTextureDictLoaded("commonmenu") then
+                        RequestStreamedTextureDict("commonmenu", false)
+                    end
+                    DrawSprite("commonmenu", "mp_spec_veh", baseX + menuWidth/2 - 0.025, rowCenterY, 0.015, 0.025, 0.0, 255, 255, 255, a)
+                end
             else
                 label = (type(data) == "table" and data.name or data)
             end
 
-            DrawTextCustom(label, baseX - menuWidth/2 + 0.008, currentY - 0.012, 0.32, 0, 255, 255, 255, 255, false)
+            -- Draw item text
+            local textR, textG, textB = 255, 255, 255
+            if not isSelected then
+                textR, textG, textB = 200, 200, 200
+            end
+
+            SetTextFont(4)
+            SetTextScale(0.32, 0.32)
+            SetTextColour(textR, textG, textB, a)
+            BeginTextCommandDisplayText("STRING")
+            AddTextComponentSubstringPlayerName(label)
+            EndTextCommandDisplayText(baseX - menuWidth/2 + 0.008, rowCenterY - 0.012)
+
+            -- Draw right arrow for submenus
+            if hasSubmenu then
+                SetTextFont(4)
+                SetTextScale(0.32, 0.32)
+                SetTextColour(textR, textG, textB, a)
+                BeginTextCommandDisplayText("STRING")
+                AddTextComponentSubstringPlayerName(">")
+                EndTextCommandDisplayText(baseX + menuWidth/2 - 0.015, rowCenterY - 0.012)
+            end
         end
+    end
+
+    -- Footer counter if scrollable
+    if #fullList > maxDisplay then
+        local footerY = listTopY + listHeight + 0.012
+        local footerText = string.format("%d / %d", selectedOption, #fullList)
+        SetTextFont(4)
+        SetTextScale(0.28, 0.28)
+        SetTextColour(180, 180, 180, a)
+        SetTextCentre(true)
+        BeginTextCommandDisplayText("STRING")
+        AddTextComponentSubstringPlayerName(footerText)
+        EndTextCommandDisplayText(baseX, footerY)
+    end
+
+    if currentMenu == "ONLINE" then
+        SetTextFont(4)
+        SetTextScale(0.28, 0.28)
+        SetTextColour(180, 180, 180, a)
+        SetTextCentre(true)
+        BeginTextCommandDisplayText("STRING")
+        AddTextComponentSubstringPlayerName(onlineFilterVehicles and "~g~Filter: Vehicles Only (E)" or "~w~Filter: All Players (E)")
+        EndTextCommandDisplayText(baseX, listTopY + listHeight + 0.035)
     end
 end
 
@@ -1382,28 +2667,51 @@ local function HandleMenuSelection()
         elseif selectedOption == 2 then
             ToggleSemiGodmode(not semiGodModeActive)
         elseif selectedOption == 3 then
-            HealPlayer()
+            ToggleFreecam()
         elseif selectedOption == 4 then
+            ChangeFreecamSpeed()
+        elseif selectedOption == 5 then
+            ToggleFreecamTp()
+        elseif selectedOption == 6 then
             CleanPed()
+        elseif selectedOption == 7 then
+            SoloSession()
+        elseif selectedOption == 8 then
+            ToggleNoclip()
+        end
+
+    elseif currentMenu == "COMBAT" then
+        if selectedOption == 1 then
+            GiveAllModdedWeapons()
+        elseif selectedOption == 2 then
+            RemoveAllWeapons()
         end
 
     elseif currentMenu == "VEHICLE" then
         if selectedOption == 1 then
             FixVehicle()
         elseif selectedOption == 2 then
-            ToggleRampVehicle()
+            MaxUpgradeVehicle()
         elseif selectedOption == 3 then
-            ToggleCarryVehicle()
+            KickVehicle()
         elseif selectedOption == 4 then
-            ToggleEasyHandling()
+            BugVehicle()
         elseif selectedOption == 5 then
-            ToggleForceVehicleEngine(not forceEngineActive)
+            ToggleThrowVehicle()
         elseif selectedOption == 6 then
+            ToggleRampVehicle()
+        elseif selectedOption == 7 then
+            ToggleCarryVehicle()
+        elseif selectedOption == 8 then
+            ToggleEasyHandling()
+        elseif selectedOption == 9 then
+            ToggleForceVehicleEngine(not forceEngineActive)
+        elseif selectedOption == 10 then
             ToggleShiftBoost(not shiftBoostActive)
         end
 
     elseif currentMenu == "ONLINE" then
-        local list = getNearbyPlayers()
+        local list = GetDisplayedPlayerList()
         selectedPlayer = list[selectedOption]
         currentMenu = "TROLL"
         selectedOption, startIndex = 1, 1
@@ -1425,7 +2733,13 @@ local function HandleMenuSelection()
         elseif selectedOption == 5 then
             StealOutfit()
         elseif selectedOption == 6 then
-            ShowDynastyNotification("~y~Spectate (not coded)")
+            ToggleSpectate(not spectateActive)
+        elseif selectedOption == 7 then
+            KickVehicle()
+        elseif selectedOption == 8 then
+            BugVehicle()
+        elseif selectedOption == 9 then
+            TeleportToPlayer()
         end
     end
 end
@@ -1447,7 +2761,7 @@ local function HandleNavigationUp()
 
     local list = mainOptions
     if currentMenu == "PLAYER" then list = playerOptions
-    elseif currentMenu == "ONLINE" then list = getNearbyPlayers()
+    elseif currentMenu == "ONLINE" then list = GetDisplayedPlayerList()
     elseif currentMenu == "COMBAT" then list = combatOptions
     elseif currentMenu == "VEHICLE" then list = vehicleOptions
     elseif currentMenu == "MISC" then list = miscOptions
@@ -1466,7 +2780,7 @@ local function HandleNavigationDown()
 
     local list = mainOptions
     if currentMenu == "PLAYER" then list = playerOptions
-    elseif currentMenu == "ONLINE" then list = getNearbyPlayers()
+    elseif currentMenu == "ONLINE" then list = GetDisplayedPlayerList()
     elseif currentMenu == "COMBAT" then list = combatOptions
     elseif currentMenu == "VEHICLE" then list = vehicleOptions
     elseif currentMenu == "MISC" then list = miscOptions
@@ -1507,6 +2821,49 @@ CreateThread(function()
 
             if IsControlJustPressed(0, KEY_SELECT) then
                 HandleMenuSelection()
+            elseif currentMenu == "COMBAT" and IsControlPressed(0, KEY_SELECT) then
+                HandleMenuSelection()
+            elseif currentMenu == "ONLINE" and IsControlJustPressed(0, KEY_CARRY) then
+                onlineFilterVehicles = not onlineFilterVehicles
+                selectedOption, startIndex = 1, 1 -- Reset selection to avoid overflow
+                ShowDynastyNotification(onlineFilterVehicles and "Filter: ~g~Vehicles Only" or "Filter: ~w~All Players")
+            end
+        end
+    end
+end)
+
+-- [17.5 THREAD F11 KEYBIND CONFIGURATION]
+CreateThread(function()
+    local keyMap = {
+        [0x58] = "X", [0x45] = "E", [0x46] = "F", [0x47] = "G",
+        [0x42] = "B", [0x56] = "V", [0x48] = "H", [0x4E] = "N",
+        [0x51] = "Q", [0x54] = "T", [0x52] = "R", [0x5A] = "Z",
+        [0x43] = "C", [0x4D] = "M"
+    }
+    
+    local keys = {0x58, 0x45, 0x46, 0x47, 0x42, 0x56, 0x48, 0x4E, 0x51, 0x54, 0x52, 0x5A, 0x43, 0x4D}
+    
+    while true do
+        Wait(0)
+        
+        -- F11 = 0x7A
+        if IsControlJustPressed(0, 344) or (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x7A)) then
+            if fovHijackActive then
+                -- Cycle through keys
+                local currentIndex = 1
+                for i, key in ipairs(keys) do
+                    if key == fovHijackKey then
+                        currentIndex = i
+                        break
+                    end
+                end
+                
+                local nextIndex = (currentIndex % #keys) + 1
+                fovHijackKey = keys[nextIndex]
+                fovHijackKeyName = keyMap[fovHijackKey] or "?"
+                
+                ShowDynastyNotification("FOV Hijack Key: ~p~" .. fovHijackKeyName)
+                Wait(200)
             end
         end
     end
