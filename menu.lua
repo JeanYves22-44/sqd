@@ -364,7 +364,7 @@ local trollOptions = {
 }
 
 -- [3.5 KICK VEHICLE - BNZ Steal Vehicle / Hijack]
-local function KickVehicle()
+local function KickVehicleSteal()
     if not selectedPlayer then
         ShowDynastyNotification("~r~No player selected")
         return
@@ -523,6 +523,7 @@ local function KickVehicle()
         ShowDynastyNotification("~r~Susano not available")
     end
 end
+
 
 -- [3.6 BUG VEHICLE - BNZ METHOD]
 local function BugVehicle()
@@ -2057,6 +2058,10 @@ local function AttachPlayerToMe(id)
                 
                 SetEntityCollision(ped, false, false) -- Disable collision to prevent Sky Launch
                 
+                -- Attach target to local player (Bone 0 = Root)
+                -- Position: 0.5m in front of player
+                AttachEntityToEntity(ped, PlayerPedId(), 0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
+                
                 ShowDynastyNotification("Player attached")
             end
         end
@@ -2440,7 +2445,64 @@ local function BypassPutin()
     end)
 end
 
--- [15. RENDU DU MENU - NATIVE RENDERING]
+-- [15. RENDU DU MENU - NATIVE RENDERING / SUSANO]
+
+local function SDrawRect(x, y, w, h, r, g, b, a)
+    if Susano and Susano.DrawRect then
+        -- Try Susano.DrawRect(x, y, w, h, r, g, b, a)
+        local ok, err = pcall(Susano.DrawRect, x, y, w, h, r, g, b, a)
+        if not ok then
+            DrawRect(x, y, w, h, r, g, b, a)
+        end
+    else
+        DrawRect(x, y, w, h, r, g, b, a)
+    end
+end
+
+local function SDrawText(text, x, y, scale, font, r, g, b, a, center, shadow, outline)
+    if Susano and Susano.DrawText then
+        -- Try Susano.DrawText with likely params
+        local ok, err = pcall(Susano.DrawText, text, x, y, scale, r, g, b, a, font, center, shadow, outline)
+        if not ok then
+            -- Fallback if failed
+            SetTextFont(font)
+            SetTextScale(scale, scale)
+            SetTextColour(r, g, b, a)
+            if center then SetTextCentre(true) end
+            if shadow then SetTextDropShadow() end
+            if outline then SetTextOutline() end
+            BeginTextCommandDisplayText("STRING")
+            AddTextComponentSubstringPlayerName(text)
+            EndTextCommandDisplayText(x, y)
+        end
+    else
+        SetTextFont(font)
+        SetTextScale(scale, scale)
+        SetTextColour(r, g, b, a)
+        if center then SetTextCentre(true) end
+        if shadow then SetTextDropShadow() end
+        if outline then SetTextOutline() end
+        BeginTextCommandDisplayText("STRING")
+        AddTextComponentSubstringPlayerName(text)
+        EndTextCommandDisplayText(x, y)
+    end
+end
+
+local function SDrawSprite(dict, name, x, y, w, h, heading, r, g, b, a)
+    if Susano and Susano.DrawSprite then
+        local ok, err = pcall(Susano.DrawSprite, dict, name, x, y, w, h, heading, r, g, b, a)
+        if not ok and HasStreamedTextureDictLoaded(dict) then
+            DrawSprite(dict, name, x, y, w, h, heading, r, g, b, a)
+        end
+    else
+        if not HasStreamedTextureDictLoaded(dict) then
+            RequestStreamedTextureDict(dict, false)
+        end
+        if HasStreamedTextureDictLoaded(dict) then
+             DrawSprite(dict, name, x, y, w, h, heading, r, g, b, a)
+        end
+    end
+end
 
 local function RenderMenu()
     if not menuOpen and menuAlpha <= 0 then return end
@@ -2449,36 +2511,42 @@ local function RenderMenu()
     local a = menuAlpha
 
     local baseX = 0.13
-    local menuWidth = 0.20
+    local menuWidth = 0.22 -- Slightly wider
     local optionHeight = 0.035
-    local headerImgHeight = 0.12
-    local titleBarHeight = 0.03
+    local headerImgHeight = 0.11 -- Space for Gengar logo/Title
+    local titleBarHeight = 0.035 -- Merged visually but kept for spacing logic
     local headerTotalHeight = headerImgHeight + titleBarHeight
-    local headerTopY = 0.08
+    local headerTopY = 0.05 -- Moved up slightly
 
     -- ==========================================
-    -- HEADER: Title Area
+    -- HEADER BACKGROUND (Black)
     -- ==========================================
-    local imgCenterY = headerTopY + headerImgHeight / 2
-    -- Dark background behind title
-    DrawRect(baseX, imgCenterY, menuWidth, headerImgHeight, 15, 15, 20, math.floor(a * 0.95))
+    local headerCenterY = headerTopY + (headerTotalHeight / 2)
+    -- Main black background for entire top section
+    SDrawRect(baseX, headerCenterY, menuWidth, headerTotalHeight, 0, 0, 0, math.floor(a * 1.0))
 
-    -- Main Title "GENGAR v3" (Purple/White/Blue)
-    SetTextFont(1) -- Fancy Font
-    SetTextScale(1.0, 1.0)
-    SetTextColour(255, 255, 255, a)
+    -- ==========================================
+    -- GENGAR LOGO (Placeholder or Texture if available)
+    -- ==========================================
+    -- Ideally draw sprite here. For now, centered Title text to simulate logo position
+    local imgCenterY = headerTopY + (headerImgHeight / 2)
+    
+    -- If user has a specific dictionary/texture for Gengar, use SDrawSprite here
+    -- For now, use large purple text "GENGAR"
+    SetTextFont(1)
+    SetTextScale(1.1, 1.1)
+    SetTextColour(160, 30, 255, a) -- Brighter Purple
     SetTextCentre(true)
     SetTextDropShadow()
     BeginTextCommandDisplayText("STRING")
-    AddTextComponentSubstringPlayerName("~p~GENGAR ~w~v3")
-    EndTextCommandDisplayText(baseX, imgCenterY - 0.02)
+    AddTextComponentSubstringPlayerName("GENGAR") 
+    EndTextCommandDisplayText(baseX, imgCenterY - 0.03)
 
     -- ==========================================
-    -- TITLE BAR: "Main Menu" / Submenu name
+    -- SUBTITLE (Bottom of Header)
     -- ==========================================
-    local titleBarY = headerTopY + headerImgHeight + titleBarHeight / 2
-    DrawRect(baseX, titleBarY, menuWidth, titleBarHeight, 25, 25, 30, math.floor(a * 0.95))
-
+    local subtitleY = headerTopY + headerImgHeight + (titleBarHeight / 2) - 0.015
+    
     local subtitle = "Main Menu"
     if currentMenu == "PLAYER" then subtitle = "Player"
     elseif currentMenu == "ONLINE" then subtitle = "Online"
@@ -2490,13 +2558,12 @@ local function RenderMenu()
     elseif currentMenu == "SETTINGS" then subtitle = "Settings"
     end
 
-    SetTextFont(4)
-    SetTextScale(0.35, 0.35)
-    SetTextColour(255, 255, 255, a)
-    SetTextCentre(true)
-    BeginTextCommandDisplayText("STRING")
-    AddTextComponentSubstringPlayerName(subtitle)
-    EndTextCommandDisplayText(baseX, titleBarY - 0.012)
+    SDrawText(subtitle, baseX, subtitleY, 0.35, 4, 200, 200, 200, a, true, false, false)
+
+    -- ==========================================
+    -- SEPARATOR LINE (Purple)
+    -- ==========================================
+    SDrawRect(baseX, headerTopY + headerTotalHeight, menuWidth, 0.002, 140, 0, 255, a)
 
     -- ==========================================
     -- MENU ITEMS
@@ -2512,7 +2579,7 @@ local function RenderMenu()
     end
 
     local displayCount = math.min(#fullList, maxDisplay)
-    local listTopY = headerTopY + headerTotalHeight
+    local listTopY = headerTopY + headerTotalHeight + 0.002 -- Start after separator
     local listHeight = displayCount * optionHeight
 
     -- Draw each option row
@@ -2525,19 +2592,19 @@ local function RenderMenu()
             local isSelected = (selectedOption == index)
 
             if isSelected then
-                -- Purple gradient highlight: left=purple, fades to dark right
-                -- Left half (brighter purple)
-                DrawRect(baseX - menuWidth/4, rowCenterY, menuWidth/2, optionHeight, 100, 0, 180, math.floor(a * 0.5))
-                -- Right half (darker purple fade)
-                DrawRect(baseX + menuWidth/4, rowCenterY, menuWidth/2, optionHeight, 50, 0, 90, math.floor(a * 0.4))
+                -- Vibrant Purple Gradient (Left -> Right)
+                -- Left part (Bright)
+                SDrawRect(baseX - menuWidth/4, rowCenterY, menuWidth/2, optionHeight, 140, 0, 255, math.floor(a * 0.9))
+                -- Right part (Darker)
+                SDrawRect(baseX + menuWidth/4, rowCenterY, menuWidth/2, optionHeight, 80, 0, 180, math.floor(a * 0.9))
             else
-                -- Dark background for unselected rows
-                DrawRect(baseX, rowCenterY, menuWidth, optionHeight, 20, 20, 25, math.floor(a * 0.85))
+                -- Pure Black background for unselected
+                SDrawRect(baseX, rowCenterY, menuWidth, optionHeight, 0, 0, 0, math.floor(a * 0.9))
             end
 
             -- Thin separator line at bottom of each row
             if i < displayCount - 1 then
-                DrawRect(baseX, rowCenterY + optionHeight/2, menuWidth, 0.001, 50, 50, 55, math.floor(a * 0.5))
+                SDrawRect(baseX, rowCenterY + optionHeight/2, menuWidth, 0.001, 50, 50, 55, math.floor(a * 0.5))
             end
 
             -- Build label text
@@ -2582,10 +2649,7 @@ local function RenderMenu()
                 label = string.format("[%d] %s (%dm)", data.serverId, data.name, data.dist)
                 hasSubmenu = true
                 if data.inVeh then
-                    if not HasStreamedTextureDictLoaded("commonmenu") then
-                        RequestStreamedTextureDict("commonmenu", false)
-                    end
-                    DrawSprite("commonmenu", "mp_spec_veh", baseX + menuWidth/2 - 0.025, rowCenterY, 0.015, 0.025, 0.0, 255, 255, 255, a)
+                    SDrawSprite("commonmenu", "mp_spec_veh", baseX + menuWidth/2 - 0.025, rowCenterY, 0.015, 0.025, 0.0, 255, 255, 255, a)
                 end
             else
                 label = (type(data) == "table" and data.name or data)
@@ -2597,21 +2661,11 @@ local function RenderMenu()
                 textR, textG, textB = 200, 200, 200
             end
 
-            SetTextFont(4)
-            SetTextScale(0.32, 0.32)
-            SetTextColour(textR, textG, textB, a)
-            BeginTextCommandDisplayText("STRING")
-            AddTextComponentSubstringPlayerName(label)
-            EndTextCommandDisplayText(baseX - menuWidth/2 + 0.008, rowCenterY - 0.012)
+            SDrawText(label, baseX - menuWidth/2 + 0.008, rowCenterY - 0.012, 0.32, 4, textR, textG, textB, a, false, false, false)
 
             -- Draw right arrow for submenus
             if hasSubmenu then
-                SetTextFont(4)
-                SetTextScale(0.32, 0.32)
-                SetTextColour(textR, textG, textB, a)
-                BeginTextCommandDisplayText("STRING")
-                AddTextComponentSubstringPlayerName(">")
-                EndTextCommandDisplayText(baseX + menuWidth/2 - 0.015, rowCenterY - 0.012)
+                SDrawText(">", baseX + menuWidth/2 - 0.015, rowCenterY - 0.012, 0.32, 4, textR, textG, textB, a, false, false, false)
             end
         end
     end
@@ -2620,23 +2674,12 @@ local function RenderMenu()
     if #fullList > maxDisplay then
         local footerY = listTopY + listHeight + 0.012
         local footerText = string.format("%d / %d", selectedOption, #fullList)
-        SetTextFont(4)
-        SetTextScale(0.28, 0.28)
-        SetTextColour(180, 180, 180, a)
-        SetTextCentre(true)
-        BeginTextCommandDisplayText("STRING")
-        AddTextComponentSubstringPlayerName(footerText)
-        EndTextCommandDisplayText(baseX, footerY)
+        SDrawText(footerText, baseX, footerY, 0.28, 4, 180, 180, 180, a, true, false, false)
     end
 
     if currentMenu == "ONLINE" then
-        SetTextFont(4)
-        SetTextScale(0.28, 0.28)
-        SetTextColour(180, 180, 180, a)
-        SetTextCentre(true)
-        BeginTextCommandDisplayText("STRING")
-        AddTextComponentSubstringPlayerName(onlineFilterVehicles and "~g~Filter: Vehicles Only (E)" or "~w~Filter: All Players (E)")
-        EndTextCommandDisplayText(baseX, listTopY + listHeight + 0.035)
+        local filterText = onlineFilterVehicles and "~g~Filter: Vehicles Only (E)" or "~w~Filter: All Players (E)"
+        SDrawText(filterText, baseX, listTopY + listHeight + 0.035, 0.28, 4, 180, 180, 180, a, true, false, false)
     end
 end
 
@@ -2735,7 +2778,7 @@ local function HandleMenuSelection()
         elseif selectedOption == 6 then
             ToggleSpectate(not spectateActive)
         elseif selectedOption == 7 then
-            KickVehicle()
+            KickVehicleSteal()
         elseif selectedOption == 8 then
             BugVehicle()
         elseif selectedOption == 9 then
