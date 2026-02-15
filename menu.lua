@@ -74,6 +74,7 @@ local miscOptions = {
 
 local trollOptions = {
     "Launch Player",
+    "Launch Player V2",
     "Attach Player",
     "Black Hole",
     "Steal Outfit",
@@ -744,6 +745,10 @@ local function ToggleShiftBoost(enable)
 end
 
 -- [10. LAUNCH PLAYER - VERSION FORCE MAXIMALE]
+-- [10. LAUNCH PLAYER (Former Lunch)]
+local lunchingActive = false
+local cachedReturnCoords = nil
+
 local function LaunchPlayer()
     if not selectedPlayer then 
         ShowDynastyNotification("~r~No player selected")
@@ -764,73 +769,142 @@ local function LaunchPlayer()
         return
     end
 
-    local myPed = PlayerPedId()
-    local myOriginalCoords = GetEntityCoords(myPed)
-    local targetCoords = GetEntityCoords(targetPed)
-    local distance = #(myOriginalCoords - targetCoords)
+    CreateThread(function()
+        local myPed = PlayerPedId()
+        if not myPed then return end
 
-    -- ÉTAPE 1: TP PRÈS SI NÉCESSAIRE
-    local needTP = distance > 10.0
-    if needTP then
-        local angle = math.random() * 2 * math.pi
-        local radiusOffset = math.random(5, 9)
-        local xOffset = math.cos(angle) * radiusOffset
-        local yOffset = math.sin(angle) * radiusOffset
+        local myCoords = GetEntityCoords(myPed)
+        
+        -- Safe Return Logic: Only save coords if we aren't already running an action
+        if not lunchingActive then
+            cachedReturnCoords = myCoords
+            lunchingActive = true
+        end
+        
+        -- Use cached coords if available, otherwise fallback to current
+        local returnCoords = cachedReturnCoords or myCoords
+        local targetCoords = GetEntityCoords(targetPed)
 
-        SetEntityCoordsNoOffset(myPed, 
-            targetCoords.x + xOffset, 
-            targetCoords.y + yOffset, 
-            targetCoords.z, 
-            false, false, false)
-        SetEntityVisible(myPed, false, 0)
-        Wait(150)
+        if returnCoords and targetCoords then
+            -- Teleport near target (hidden)
+            local angle = math.random() * 2 * math.pi
+            local radiusOffset = math.random(5, 9)
+            local xOffset = math.cos(angle) * radiusOffset
+            local yOffset = math.sin(angle) * radiusOffset
+            local newCoords = vector3(targetCoords.x + xOffset, targetCoords.y + yOffset, targetCoords.z)
+            
+            SetEntityCoordsNoOffset(myPed, newCoords.x, newCoords.y, newCoords.z, false, false, false)
+            SetEntityVisible(myPed, false, 0)
+            Wait(100)
+
+            -- Teleport to target and attach (BNZ Launch Logic: 10 loops)
+            local curTargetCoords = GetEntityCoords(targetPed)
+            if curTargetCoords then
+                ClearPedTasksImmediately(myPed)
+                for i = 1, 10 do
+                    if not DoesEntityExist(targetPed) then break end
+                    SetEntityCoords(myPed, curTargetCoords.x, curTargetCoords.y, curTargetCoords.z + 0.5, false, false, false, false)
+                    Wait(30)
+                    AttachEntityToEntityPhysically(myPed, targetPed, 0, 0.0, 0.0, 0.0, 150.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1, false, false, 1, 2)
+                    Wait(30)
+                    DetachEntity(myPed, true, true)
+                    Wait(50)
+                end
+            end
+
+            -- Return to original position (Force return)
+            ClearPedTasksImmediately(myPed)
+            if returnCoords then
+                SetEntityCoords(myPed, returnCoords.x, returnCoords.y, returnCoords.z + 1.0, false, false, false, false)
+                Wait(100)
+                SetEntityCoords(myPed, returnCoords.x, returnCoords.y, returnCoords.z, false, false, false, false)
+            end
+            SetEntityVisible(myPed, true, 0)
+            
+            -- Only reset if we are done (simple logic: just reset flag after return)
+            lunchingActive = false
+            -- We don't clear cachedReturnCoords immediately so if spam happens, it keeps the ground coords? 
+            -- Actually better to keep it true during the op. If user spams, the second op uses the same cached coords.
+            
+            ShowDynastyNotification("~g~Player launched! 🚀")
+        end
+    end)
+end
+
+-- [10.1 LUNCH PLAYER 2 - HARD LAUNCH]
+local function LunchPlayer2()
+    if not selectedPlayer then 
+        ShowDynastyNotification("~r~No player selected")
+        return 
     end
 
-    -- ÉTAPE 2: POSITIONNER PLUS HAUT
-    local currentTargetCoords = GetEntityCoords(targetPed)
-    ClearPedTasksImmediately(myPed)
-    SetEntityCoords(myPed, 
-        currentTargetCoords.x, 
-        currentTargetCoords.y, 
-        currentTargetCoords.z + 2.0,
-        false, false, false, false)
-    Wait(150)
+    local targetServerId = selectedPlayer.serverId
+    local clientId = GetPlayerFromServerId(targetServerId)
 
-    -- ÉTAPE 3: ATTACH AVEC FORCE MAXIMALE
-    AttachEntityToEntityPhysically(
-        targetPed,
-        myPed,
-        0,
-        0.0, 0.0, 0.0,
-        50000.0,
-        0.0, 0.0,
-        0.0, 0.0, 0.0,
-        1, false, false, 1, 2
-    )
-    Wait(250)
-
-    -- ÉTAPE 4: DETACH
-    DetachEntity(targetPed, true, true)
-    Wait(300)
-
-    -- ÉTAPE 5: RETOUR
-    if needTP then
-        ClearPedTasksImmediately(myPed)
-        SetEntityCoords(myPed, 
-            myOriginalCoords.x, 
-            myOriginalCoords.y, 
-            myOriginalCoords.z + 1.0, 
-            false, false, false, false)
-        Wait(100)
-        SetEntityCoords(myPed, 
-            myOriginalCoords.x, 
-            myOriginalCoords.y, 
-            myOriginalCoords.z, 
-            false, false, false, false)
-        SetEntityVisible(myPed, true, 0)
+    if not clientId or clientId == -1 then
+        ShowDynastyNotification("~r~Player not found")
+        return
     end
 
-    ShowDynastyNotification("~g~Player launched! 🚀")
+    local targetPed = GetPlayerPed(clientId)
+    if not targetPed or not DoesEntityExist(targetPed) then
+        ShowDynastyNotification("~r~Target invalid")
+        return
+    end
+
+    CreateThread(function()
+        local myPed = PlayerPedId()
+        if not myPed then return end
+
+        local myCoords = GetEntityCoords(myPed)
+
+        -- Safe Return Logic
+        if not lunchingActive then
+            cachedReturnCoords = myCoords
+            lunchingActive = true
+        end
+
+        local returnCoords = cachedReturnCoords or myCoords
+        local targetCoords = GetEntityCoords(targetPed)
+
+        if returnCoords and targetCoords then
+             -- Teleport near target (hidden)
+            local angle = math.random() * 2 * math.pi
+            local radiusOffset = math.random(5, 9)
+            local xOffset = math.cos(angle) * radiusOffset
+            local yOffset = math.sin(angle) * radiusOffset
+            local newCoords = vector3(targetCoords.x + xOffset, targetCoords.y + yOffset, targetCoords.z)
+            
+            SetEntityCoordsNoOffset(myPed, newCoords.x, newCoords.y, newCoords.z, false, false, false)
+            SetEntityVisible(myPed, false, 0)
+            Wait(150)
+
+            -- Teleport to target and attach (Gengar v3 Logic: Single execution - Hard Launch)
+            local curTargetCoords = GetEntityCoords(targetPed)
+            if curTargetCoords then
+                ClearPedTasksImmediately(myPed)
+                SetEntityCoords(myPed, curTargetCoords.x, curTargetCoords.y, curTargetCoords.z + 2.0, false, false, false, false)
+                Wait(150)
+                AttachEntityToEntityPhysically(myPed, targetPed, 0, 0.0, 0.0, 0.0, 50000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1, false, false, 1, 2)
+                Wait(250)
+                DetachEntity(myPed, true, true)
+                Wait(300)
+            end
+
+            -- Return to original position
+            ClearPedTasksImmediately(myPed)
+            if returnCoords then
+                SetEntityCoords(myPed, returnCoords.x, returnCoords.y, returnCoords.z + 1.0, false, false, false, false)
+                Wait(100)
+                SetEntityCoords(myPed, returnCoords.x, returnCoords.y, returnCoords.z, false, false, false, false)
+            end
+            SetEntityVisible(myPed, true, 0)
+            
+            lunchingActive = false
+
+            ShowDynastyNotification("~g~Gengar Launch executed! 🚀")
+        end
+    end)
 end
 
 -- [11. FONCTIONS ONLINE/TROLL]
@@ -852,7 +926,11 @@ local function DetachPlayer(id)
 
     if attachedPlayers[id] then
         local ped = attachedPlayers[id]
-        if DoesEntityExist(ped) and originalCoords[id] then
+        if DoesEntityExist(ped) then
+            SetEntityCollision(ped, true, true) -- Re-enable collision
+        end
+        
+        if originalCoords[id] then
             local success = pcall(function()
                 SetEntityCoords(ped, originalCoords[id].x, originalCoords[id].y, originalCoords[id].z, false, false, false, true)
             end)
@@ -880,6 +958,9 @@ local function AttachPlayerToMe(id)
             if coords and coords.x and coords.y and coords.z then
                 attachedPlayers[id] = ped
                 originalCoords[id] = coords
+                
+                SetEntityCollision(ped, false, false) -- Disable collision to prevent Sky Launch
+                
                 ShowDynastyNotification("Player attached")
             end
         end
@@ -1130,7 +1211,24 @@ local function StealOutfit()
         beard_4 = 0
     }
 
+    -- Protect player from damage during skin switch (prevents falling/glitch damage)
+    local myPed = PlayerPedId()
+    local wasInvincible = GetPlayerInvincible(PlayerId())
+    SetPlayerInvincible(PlayerId(), true)
+
     TriggerEvent('skinchanger:loadSkin', outfit)
+
+    CreateThread(function()
+        Wait(500) -- Wait for skin to load/apply
+        local ped = PlayerPedId()
+        SetEntityHealth(ped, GetEntityMaxHealth(ped)) -- Build back health if any lost
+        ClearPedBloodDamage(ped)
+        ResetPedVisibleDamage(ped)
+        
+        if not wasInvincible then
+            SetPlayerInvincible(PlayerId(), false)
+        end
+    end)
 
     ShowDynastyNotification("~g~Outfit stolen!")
 end
@@ -1240,9 +1338,11 @@ local function RenderMenu()
             elseif currentMenu == "VEHICLE" and index == 6 then
                 label = "Shift Boost " .. (shiftBoostActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "TROLL" and index == 2 then
+                label = "Launch Player V2"
+            elseif currentMenu == "TROLL" and index == 3 then
                 local isAttached = selectedPlayer and isPlayerAttached(selectedPlayer.id)
                 label = "Attach Player " .. (isAttached and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "TROLL" and index == 3 then
+            elseif currentMenu == "TROLL" and index == 4 then
                 label = "Black Hole " .. (blackHoleActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "ONLINE" then
                 label = string.format("[%d] %s (%dm)", data.serverId, data.name, data.dist)
@@ -1317,12 +1417,14 @@ local function HandleMenuSelection()
         if selectedOption == 1 then
             LaunchPlayer()
         elseif selectedOption == 2 then
-            ToggleAttachPlayer()
+            LunchPlayer2() -- Launch V2
         elseif selectedOption == 3 then
-            ToggleBlackHole()
+            ToggleAttachPlayer()
         elseif selectedOption == 4 then
-            StealOutfit()
+            ToggleBlackHole()
         elseif selectedOption == 5 then
+            StealOutfit()
+        elseif selectedOption == 6 then
             ShowDynastyNotification("~y~Spectate (not coded)")
         end
     end
