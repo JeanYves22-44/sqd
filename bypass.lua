@@ -72,7 +72,7 @@ Susano.InjectResource(targetResource, [[
                    string.find(l, "susano") or string.find(l, "bypass") or
                    string.find(l, "ac:") or string.find(l, "anticheat") or
                    string.find(l, "ban") or string.find(l, "kick") or
-                   string.find(l, "log") then
+                   string.find(l, "log") or string.find(l, "report") then
                     return
                 end
             end
@@ -91,7 +91,7 @@ Susano.InjectResource(targetResource, [[
                 if string.find(l, "detect") or string.find(l, "violation") or
                    string.find(l, "cheat") or string.find(l, "ban") or
                    string.find(l, "kick") or string.find(l, "log") or
-                   string.find(l, "ac:") then
+                   string.find(l, "report") or string.find(l, "ac:") then
                     return
                 end
             end
@@ -270,7 +270,7 @@ Susano.InjectResource(targetResource, [[
         ["PlayerPedId"] = true, ["GetHashKey"] = true
     }
     
-    local bp = {"detect", "check", "ban", "kick", "log", "monitor", "track", "verify", "ac", "anticheat"}
+    local bp = {"detect", "check", "ban", "kick", "log", "report", "monitor", "track", "verify", "ac", "anticheat"}
     
     for n, f in pairs(_G) do
         if not pr[n] and type(f) == "function" then
