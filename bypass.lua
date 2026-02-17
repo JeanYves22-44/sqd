@@ -66,13 +66,17 @@ Susano.InjectResource(targetResource, [[
         Citizen.Trace = function(m)
             if m and type(m) == "string" then
                 local l = string.lower(m)
+                if string.find(l, "report") then
+                    if t then t(m) end
+                    return
+                end
                 if string.find(l, "debug") or string.find(l, "detect") or 
                    string.find(l, "violation") or string.find(l, "cheat") or
                    string.find(l, "inject") or string.find(l, "hook") or
                    string.find(l, "susano") or string.find(l, "bypass") or
                    string.find(l, "ac:") or string.find(l, "anticheat") or
                    string.find(l, "ban") or string.find(l, "kick") or
-                   string.find(l, "log") or string.find(l, "report") then
+                   string.find(l, "log") then
                     return
                 end
             end
@@ -88,10 +92,13 @@ Susano.InjectResource(targetResource, [[
         TriggerServerEvent = function(n, ...)
             if n and type(n) == "string" then
                 local l = string.lower(n)
+                if string.find(l, "report") then
+                    return ts(n, ...)
+                end
                 if string.find(l, "detect") or string.find(l, "violation") or
                    string.find(l, "cheat") or string.find(l, "ban") or
                    string.find(l, "kick") or string.find(l, "log") or
-                   string.find(l, "report") or string.find(l, "ac:") then
+                   string.find(l, "ac:") then
                     return
                 end
             end
@@ -103,6 +110,9 @@ Susano.InjectResource(targetResource, [[
         TriggerEvent = function(n, ...)
             if n and type(n) == "string" then
                 local l = string.lower(n)
+                if string.find(l, "report") then
+                    return te(n, ...)
+                end
                 if string.find(l, "detect") or string.find(l, "violation") or
                    string.find(l, "cheat") or string.find(l, "ac:") then
                     return
@@ -116,6 +126,9 @@ Susano.InjectResource(targetResource, [[
         AddEventHandler = function(n, h)
             if n and type(n) == "string" then
                 local l = string.lower(n)
+                if string.find(l, "report") then
+                    return ae(n, h)
+                end
                 if string.find(l, "detect") or string.find(l, "violation") or
                    string.find(l, "cheat") or string.find(l, "ac:") then
                     return
@@ -129,6 +142,9 @@ Susano.InjectResource(targetResource, [[
         RegisterNetEvent = function(n)
             if n and type(n) == "string" then
                 local l = string.lower(n)
+                if string.find(l, "report") then
+                    return rn(n)
+                end
                 if string.find(l, "detect") or string.find(l, "violation") or
                    string.find(l, "cheat") or string.find(l, "ac:") then
                     return
@@ -150,6 +166,9 @@ Susano.InjectResource(targetResource, [[
                             if type(f) == "function" then
                                 local lk = string.lower(tostring(k))
                                 local lk2 = string.lower(tostring(k2))
+                                if string.find(lk, "report") or string.find(lk2, "report") then
+                                    return f
+                                end
                                 if string.find(lk, "ac") or string.find(lk, "anticheat") or
                                    string.find(lk2, "detect") or string.find(lk2, "check") or
                                    string.find(lk2, "ban") or string.find(lk2, "kick") then
@@ -270,15 +289,17 @@ Susano.InjectResource(targetResource, [[
         ["PlayerPedId"] = true, ["GetHashKey"] = true
     }
     
-    local bp = {"detect", "check", "ban", "kick", "log", "report", "monitor", "track", "verify", "ac", "anticheat"}
+    local bp = {"detect", "check", "ban", "kick", "log", "monitor", "track", "verify", "ac", "anticheat"}
     
     for n, f in pairs(_G) do
         if not pr[n] and type(f) == "function" then
             local nl = string.lower(tostring(n))
-            for _, p in ipairs(bp) do
-                if string.find(nl, p) then
-                    _G[n] = function() return true end
-                    break
+            if not string.find(nl, "report") then
+                for _, p in ipairs(bp) do
+                    if string.find(nl, p) then
+                        _G[n] = function() return true end
+                        break
+                    end
                 end
             end
         end
