@@ -1,5 +1,29 @@
 local menuOpen = false
-_G.bypassLoaded = false -- Global bypass flag
+local bypassLoaded = false
+-- Auto-Detect Bypass (User Request: Shoes Check)
+Citizen.CreateThread(function()
+    local ped = PlayerPedId()
+    local currentShoes = GetPedDrawableVariation(ped, 6) -- Comp 6 = Shoes
+    local currentTex = GetPedTextureVariation(ped, 6)
+    
+    -- Test Shoes (Drawable 21)
+    SetPedComponentVariation(ped, 6, 22, 0, 0)
+    
+    Wait(2000) -- Wait for AC check
+    
+    if GetPedDrawableVariation(ped, 6) == 21 then
+        bypassLoaded = true
+        local flagStatus = tostring(_G.PutinBypassActive__)
+        ShowDynastyNotification("~g~Bypass Verified (Shoes) | Flag: " .. flagStatus)
+        -- Restore original
+        SetPedComponentVariation(ped, 6, currentShoes, currentTex, 0)
+    else
+        bypassLoaded = false
+        ShowDynastyNotification("~r~Bypass Failed (Shoes Removed)")
+        SetPedComponentVariation(ped, 6, currentShoes, currentTex, 0)
+    end
+end)
+
 local menuAlpha = 0
 local selectedOption = 1
 local startIndex = 1
@@ -61,15 +85,18 @@ local mainOptions = {
 
 
 
-local playerOptions = {
-    "Full God Mode",
-    "Semi God Mode",
-    "Solo Session",
-    "Noclip",
-    "Unfreeze",
-    "Anti Headshot",
-    "Staff Mode"
-}
+local function GetPlayerOptions()
+    return {
+        "Full God Mode",
+        "Semi God Mode",
+        "Solo Session",
+        "Noclip",
+        "Noclip Speed: " .. (type(noclipSpeed) == "number" and noclipSpeed or 1.0),
+        "Anti Headshot",
+        "Unfreeze",
+        "Staff Mode"
+    }
+end
 
 local antiFreezeActive = false
 local antiHeadshotActive = false
@@ -89,6 +116,17 @@ local vehicleOptions = {
     "Force Engine",
     "Shift Boost",
     "FOV Warp"
+}
+
+local trollOptions = {
+    "Launch Player",
+    "Launch Player 2",
+    "Toggle Attach",
+    "Toggle Black Hole",
+    "Steal Outfit",
+    "Toggle Spectate",
+    "Bug Vehicle",
+    "Teleport To Player"
 }
 
 local function GetMiscOptions()
@@ -114,18 +152,81 @@ local moddedWeapons = {
 
 local function ToggleAntiHeadshot(enable)
     antiHeadshotActive = enable
-    local ped = PlayerPedId()
-    if DoesEntityExist(ped) then
-        SetPedSuffersCriticalHits(ped, not antiHeadshotActive)
-    end
-    if antiHeadshotActive then
-        ShowDynastyNotification("Anti Headshot: ~g~ON")
+
+    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+        Susano.InjectResource("any", string.format([[
+            local susano = rawget(_G, "Susano")
+
+            if _G.AntiDamageEnabled == nil then _G.AntiDamageEnabled = false end
+            _G.AntiDamageEnabled = %s
+
+            if not _G.AntiDamageHooksInstalled and susano and type(susano.HookNative) == "function" then
+                _G.AntiDamageHooksInstalled = true
+
+                -- Block SetEntityHealth if trying to lower health
+                susano.HookNative(0x6B76DC1F3AE6E6A3, function(entity, health)
+                    if _G.AntiDamageEnabled and entity == PlayerPedId() then
+                        local currentHealth = GetEntityHealth(entity)
+                        if health < currentHealth then
+                            return false
+                        end
+                    end
+                    return true
+                end)
+
+                -- Block ApplyDamageToPed
+                susano.HookNative(0x697157CED63F18D4, function(ped, damage, armorDamage)
+                    if _G.AntiDamageEnabled and ped == PlayerPedId() then
+                        return false
+                    end
+                    return true
+                end)
+
+                -- Block HasEntityBeenDamagedByWeapon
+                susano.HookNative(0xFAEE099C6F890BB8, function(entity)
+                    if _G.AntiDamageEnabled and entity == PlayerPedId() then
+                        return false, false, false, false, false, false, false, false
+                    end
+                    return true
+                end)
+            end
+
+            if not _G.AntiDamageLoopStarted then
+                _G.AntiDamageLoopStarted = true
+                Citizen.CreateThread(function()
+                    while true do
+                        Wait(0)
+                        if _G.AntiDamageEnabled then
+                            local ped = PlayerPedId()
+                            if DoesEntityExist(ped) then
+                                SetPedSuffersCriticalHits(ped, false)
+                                SetPedCanRagdollFromPlayerImpact(ped, false)
+                            end
+                        end
+                    end
+                end)
+            end
+        ]], tostring(enable)))
     else
-        ShowDynastyNotification("Anti Headshot: ~r~OFF")
+        -- Fallback natif
+        local ped = PlayerPedId()
+        if DoesEntityExist(ped) then
+            SetPedSuffersCriticalHits(ped, not antiHeadshotActive)
+        end
+    end
+
+    if antiHeadshotActive then
+        ShowDynastyNotification("Anti Damage: ~g~ON")
+    else
+        ShowDynastyNotification("Anti Damage: ~r~OFF")
     end
 end
 
 local function GiveAllModdedWeapons()
+    if not bypassLoaded then
+        ShowDynastyNotification("~r~Bypass Required!")
+        return 
+    end
     if type(Susano) ~= "table" or type(Susano.InjectResource) ~= "function" then
         ShowDynastyNotification("~r~Error: Susano not available")
         return
@@ -247,134 +348,7 @@ local function RemoveAllWeapons()
     ShowDynastyNotification("~g~All weapons removed!")
 end
 
-local function StealOutfit()
-    if not selectedPlayer then
-        ShowDynastyNotification("~r~No player selected")
-        return
-    end
 
-    local targetServerId = selectedPlayer.serverId
-
-    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
-        Susano.InjectResource("any", string.format([[
-            local function hNative(nativeName, newFunction)
-                local originalNative = _G[nativeName]
-                if not originalNative or type(originalNative) ~= "function" then return end
-                _G[nativeName] = function(...) return newFunction(originalNative, ...) end
-            end
-
-            hNative("GetActivePlayers", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPlayerServerId", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPlayerPed", function(originalFn, ...) return originalFn(...) end)
-            hNative("PlayerPedId", function(originalFn, ...) return originalFn(...) end)
-            hNative("DoesEntityExist", function(originalFn, ...) return originalFn(...) end)
-            hNative("SetPedComponentVariation", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedDrawableVariation", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedTextureVariation", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedPaletteVariation", function(originalFn, ...) return originalFn(...) end)
-            hNative("SetPedPropIndex", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedPropIndex", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedPropTextureIndex", function(originalFn, ...) return originalFn(...) end)
-            hNative("ClearPedProp", function(originalFn, ...) return originalFn(...) end)
-            hNative("ClonePedToTarget", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedHeadBlendData", function(originalFn, ...) return originalFn(...) end)
-            hNative("SetPedHeadBlendData", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedFaceFeature", function(originalFn, ...) return originalFn(...) end)
-            hNative("SetPedFaceFeature", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedHairColor", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedHairHighlightColor", function(originalFn, ...) return originalFn(...) end)
-            hNative("SetPedHairColor", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedEyeColor", function(originalFn, ...) return originalFn(...) end)
-            hNative("SetPedEyeColor", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedHeadOverlay", function(originalFn, ...) return originalFn(...) end)
-            hNative("SetPedHeadOverlay", function(originalFn, ...) return originalFn(...) end)
-            hNative("GetPedHeadOverlayColor", function(originalFn, ...) return originalFn(...) end)
-            hNative("SetPedHeadOverlayColor", function(originalFn, ...) return originalFn(...) end)
-
-            local targetServerId = %d
-
-            local targetPlayerId = nil
-            for _, player in ipairs(GetActivePlayers()) do
-                if GetPlayerServerId(player) == targetServerId then
-                    targetPlayerId = player
-                    break
-                end
-            end
-
-            if not targetPlayerId then return end
-
-            local targetPed = GetPlayerPed(targetPlayerId)
-            local myPed = PlayerPedId()
-
-            if not DoesEntityExist(targetPed) or not DoesEntityExist(myPed) then return end
-
-            ClonePedToTarget(targetPed, myPed)
-
-            Wait(100)
-
-            -- if type(Susano) == "table" and type(Susano.SpoofPed) == "function" then
-            --     pcall(Susano.SpoofPed, GetEntityModel(myPed), true)
-            -- end
-
-            for componentId = 0, 11 do
-                local drawable = GetPedDrawableVariation(targetPed, componentId)
-                local texture = GetPedTextureVariation(targetPed, componentId)
-                local palette = GetPedPaletteVariation(targetPed, componentId)
-                SetPedComponentVariation(myPed, componentId, drawable, texture, palette)
-            end
-
-            for propId = 0, 7 do
-                local prop = GetPedPropIndex(targetPed, propId)
-                local texture = GetPedPropTextureIndex(targetPed, propId)
-                if prop ~= -1 then
-                    SetPedPropIndex(myPed, propId, prop, texture, true)
-                else
-                    ClearPedProp(myPed, propId)
-                end
-            end
-
-            -- local shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix = GetPedHeadBlendData(targetPed)
-            -- SetPedHeadBlendData(myPed, shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix)
-
-            -- for i = 0, 19 do
-            --     local value = GetPedFaceFeature(targetPed, i)
-            --     SetPedFaceFeature(myPed, i, value)
-            -- end
-
-            -- local hairColor, highlightColor = GetPedHairColor(targetPed)
-            -- SetPedHairColor(myPed, hairColor, highlightColor)
-
-            -- local eyeColor = GetPedEyeColor(targetPed)
-            -- SetPedEyeColor(myPed, eyeColor)
-
-            -- for overlayId = 0, 12 do
-            --     local overlayValue, overlayOpacity = GetPedHeadOverlay(targetPed, overlayId)
-            --     local colorType, colorId, secondColorId = GetPedHeadOverlayColor(targetPed, overlayId)
-            --     SetPedHeadOverlay(myPed, overlayId, overlayValue, overlayOpacity)
-            --     if colorType == 1 then
-            --         SetPedHeadOverlayColor(myPed, overlayId, colorType, colorId, secondColorId)
-            --     elseif colorType == 2 then
-            --         SetPedHeadOverlayColor(myPed, overlayId, colorType, colorId, secondColorId)
-            --     end
-            -- end
-        ]], targetServerId))
-
-        ShowDynastyNotification("~g~Outfit stolen!")
-    else
-        ShowDynastyNotification("~r~Susano not available")
-    end
-end
-
-local trollOptions = {
-    "Launch Player",
-    "Launch Player V2",
-    "Attach Player",
-    "Black Hole",
-    "Steal Outfit",
-    "Spectate",
-    "Bug Vehicle",
-    "TP to Player"
-}
 
 local function HijackTargetVehicle()
     if not selectedPlayer then
@@ -967,20 +941,53 @@ local function QuickRevive()
     local ped = PlayerPedId()
     if not DoesEntityExist(ped) then return end
 
-    local currentHealth = GetEntityHealth(ped)
-    local maxHealth = GetEntityMaxHealth(ped)
+    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+        Susano.InjectResource("any", [[
+            local ped = PlayerPedId()
+            if not DoesEntityExist(ped) then return end
 
-    if fullGodModeActive or semiGodModeActive then
+            local maxHealth = GetEntityMaxHealth(ped)
+            local coords = GetEntityCoords(ped)
+            local heading = GetEntityHeading(ped)
+
+            if IsEntityDead(ped) or IsPedDeadOrDying(ped, true) then
+                NetworkResurrectLocalPlayer(coords.x, coords.y, coords.z, heading, true, false)
+                ped = PlayerPedId()
+            end
+
+            SetEntityHealth(ped, maxHealth)
+            ClearPedBloodDamage(ped)
+            ResetPedVisibleDamage(ped)
+            ClearPedTasksImmediately(ped)
+            FreezeEntityPosition(ped, false)
+            SetEntityCollision(ped, true, true)
+            SetEntityInvincible(ped, false)
+            SetPedCanRagdoll(ped, false)
+
+            Citizen.CreateThread(function()
+                Wait(200)
+                SetPedCanRagdoll(PlayerPedId(), true)
+            end)
+        ]])
+        ShowDynastyNotification("~g~Revived!")
+    else
+        -- Fallback sans Susano
+        local maxHealth = GetEntityMaxHealth(ped)
+        local coords = GetEntityCoords(ped)
+        local heading = GetEntityHeading(ped)
+
+        if IsEntityDead(ped) or IsPedDeadOrDying(ped, true) then
+            NetworkResurrectLocalPlayer(coords.x, coords.y, coords.z, heading, true, false)
+            ped = PlayerPedId()
+        end
+
         SetEntityHealth(ped, maxHealth)
         ClearPedBloodDamage(ped)
         ResetPedVisibleDamage(ped)
-        ShowDynastyNotification("~g~Full Heal!")
-    elseif currentHealth > 0 and currentHealth < maxHealth then
-        local healAmount = math.min(50, maxHealth - currentHealth)
-        SetEntityHealth(ped, currentHealth + healAmount)
-        ClearPedBloodDamage(ped)
-        ResetPedVisibleDamage(ped)
-        ShowDynastyNotification("~g~+50 HP")
+        ClearPedTasksImmediately(ped)
+        FreezeEntityPosition(ped, false)
+        SetEntityCollision(ped, true, true)
+        ShowDynastyNotification("~g~Revived!")
     end
 end
 
@@ -1677,6 +1684,10 @@ local noclipActive = false
 local noclipSpeed = 1.0
 
 local function ToggleNoclip()
+    if not bypassLoaded and not noclipActive then
+        ShowDynastyNotification("~r~Bypass Required!")
+        return 
+    end
     noclipActive = not noclipActive
     
     if noclipActive then
@@ -2311,7 +2322,7 @@ local function ChangeSusanoFreecamKeybind()
 end
 
 local function LaunchPlayer()
-    if not _G.bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
+    if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
     if not selectedPlayer then 
         ShowDynastyNotification("~r~No player selected")
         return 
@@ -2386,7 +2397,7 @@ local function LaunchPlayer()
 end
 
 local function LunchPlayer2()
-    if not _G.bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
+    if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
     local myPed = PlayerPedId()
     if not myPed then return end
 
@@ -2619,32 +2630,58 @@ local function ToggleAttachPlayer()
 end
 
 local function ToggleSpectate(enable)
-    if not _G.bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
+    if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
     if not selectedPlayer then return end
     
-    local targetPed = GetPlayerPed(selectedPlayer.id)
-    
-    if not DoesEntityExist(targetPed) then
-        -- Attempt focus to load them?
-        local myPed = PlayerPedId()
-        NetworkSetInSpectatorMode(false, myPed) -- Ensure off
-        spectateActive = false
-        ShowDynastyNotification("~r~Target not found locally")
-        return
-    end
-
-    spectateActive = enable
-    NetworkSetInSpectatorMode(enable, targetPed)
-    
     if enable then
-        ShowDynastyNotification("Spectating: ~g~ON")
+        spectateActive = true
+        ShowDynastyNotification("Stealth Spectate: ~g~ON")
+        
+        CreateThread(function()
+            local cam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+            SetCamActive(cam, true)
+            RenderScriptCams(true, false, 0, true, true)
+            
+            local myPed = PlayerPedId()
+            local oldCoords = GetEntityCoords(myPed)
+            
+            -- Stealth Mode: Hide local ped and freeze
+            SetEntityVisible(myPed, false, 0)
+            SetEntityCollision(myPed, false, false)
+            FreezeEntityPosition(myPed, true)
+            
+            while spectateActive do
+                Wait(0)
+                local targetPed = GetPlayerPed(selectedPlayer.id)
+                if DoesEntityExist(targetPed) then
+                    local tCoords = GetEntityCoords(targetPed)
+                    -- Keep local ped near target to ensure streaming, but underground/hidden
+                    SetEntityCoords(myPed, tCoords.x, tCoords.y, tCoords.z - 10.0, false, false, false, false)
+                    SetCamCoord(cam, tCoords.x, tCoords.y, tCoords.z + 3.0)
+                    PointCamAtEntity(cam, targetPed, 0.0, 0.0, 0.0, true)
+                else
+                    -- Target far/not streamed. 
+                    -- In OneSync, we can't easily get coords if not streamed.
+                    -- User will see frozen cam until target is found.
+                end
+            end
+            
+            -- Cleanup
+            SetEntityVisible(myPed, true, 0)
+            SetEntityCollision(myPed, true, true)
+            FreezeEntityPosition(myPed, false)
+            SetEntityCoords(myPed, oldCoords.x, oldCoords.y, oldCoords.z, false, false, false, false)
+            RenderScriptCams(false, false, 0, true, true)
+            DestroyCam(cam, false)
+            ShowDynastyNotification("Stealth Spectate: ~r~OFF")
+        end)
     else
-        ShowDynastyNotification("Spectating: ~r~OFF")
+        spectateActive = false
     end
 end
 
 local function TeleportToPlayer()
-    if not _G.bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
+    if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
     if not selectedPlayer then return end
     local targetPed = GetPlayerPed(selectedPlayer.id)
     
@@ -2879,10 +2916,32 @@ local function StealOutfit()
     end
 
     local myPed = PlayerPedId()
-    
-    -- Copy Ped Model first if needed (optional, assuming same model for now or just components)
-    -- If models are different (Male/Female), components won't match well.
-    -- But usually StealOutfit implies copying clothes.
+
+    -- Try Pulse/Susano Injection first for perfect clone
+    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+         Susano.InjectResource("any", string.format([[
+            local targetServerId = %d
+            local targetPlayerId = nil
+            for _, player in ipairs(GetActivePlayers()) do
+                if GetPlayerServerId(player) == targetServerId then
+                    targetPlayerId = player
+                    break
+                end
+            end
+
+            if targetPlayerId then
+                local targetPed = GetPlayerPed(targetPlayerId)
+                local myPed = PlayerPedId()
+                if DoesEntityExist(targetPed) and DoesEntityExist(myPed) then
+                    ClonePedToTarget(targetPed, myPed)
+                end
+            end
+         ]], selectedPlayer.serverId))
+         ShowDynastyNotification("~g~Outfit Stolen (Injected)!")
+         return
+    end
+
+    -- Manual Fallback
     
     -- Copy Components
     for i = 0, 11 do
@@ -2903,9 +2962,28 @@ local function StealOutfit()
         end
     end
 
-    -- Fix Health/Damage visual
-    ClearPedBloodDamage(myPed)
-    ResetPedVisibleDamage(myPed)
+    -- Copy Skin / Head Blend
+    local shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix = GetPedHeadBlendData(targetPed)
+    SetPedHeadBlendData(myPed, shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix, false)
+
+    -- Copy Hair Color
+    SetPedHairColor(myPed, GetPedHairColor(targetPed), GetPedHairHighlightColor(targetPed))
+    SetPedEyeColor(myPed, GetPedEyeColor(targetPed))
+
+    -- Copy Head Overlays (Makeup, Eyebrows etc)
+    for i = 0, 12 do
+        local success, overlayValue, colourType, firstColour, secondColour, opacity = GetPedHeadOverlayData(targetPed, i)
+        if success then
+            SetPedHeadOverlay(myPed, i, overlayValue, opacity)
+            SetPedHeadOverlayColor(myPed, i, colourType, firstColour, secondColour)
+        end
+    end
+
+    -- Copy Face Features
+    for i = 0, 19 do
+        local val = GetPedFaceFeature(targetPed, i)
+        SetPedFaceFeature(myPed, i, val)
+    end
 
     ShowDynastyNotification("~g~Outfit stolen (Native)!")
 end
@@ -2919,9 +2997,24 @@ local function ToggleFOVWarp()
         ShowDynastyNotification("FOV Warp: ~g~ON~w~ | Press ~p~E~w~ to warp")
         
         CreateThread(function()
+            if not HasStreamedTextureDictLoaded("commonmenu") then
+                RequestStreamedTextureDict("commonmenu", true)
+            end
+
             while fovWarpActive do
                 Wait(0)
                 
+                -- FOV Circle (Black Transparent Round - BIG)
+                if not HasStreamedTextureDictLoaded("commonmenu") then
+                    RequestStreamedTextureDict("commonmenu", true)
+                end
+                
+                if HasStreamedTextureDictLoaded("commonmenu") then
+                     local aspect = GetAspectRatio(false)
+                     local scale = 0.45 -- Even Bigger
+                     DrawSprite("commonmenu", "common_medal", 0.5, 0.5, scale / aspect, scale, 0.0, 0, 0, 0, 80) -- More transparent (80)
+                end
+
                 if IsControlJustPressed(0, 51) then -- E key
                     local playerPed = PlayerPedId()
                     local camCoords = GetGameplayCamCoord()
@@ -2935,31 +3028,55 @@ local function ToggleFOVWarp()
                     
                     local endCoords = camCoords + (fwd * 1000.0)
                     
-                    local ray = StartShapeTestRay(
+                    -- 1. Raycast Entities (Vehicles Only - Ignore Map/Walls)
+                    -- Flag 2 = Vehicles. This allows hitting vehicles THROUGH walls (-1 blocked by map)
+                    local rayEnt = StartShapeTestRay(
                         camCoords.x, camCoords.y, camCoords.z,
                         endCoords.x, endCoords.y, endCoords.z,
-                        10, playerPed, 0
+                        2, playerPed, 0
                     )
-                    
-                    local _, hit, hitCoords, _, entityHit = GetShapeTestResult(ray)
-                    
-                    if hit and entityHit and DoesEntityExist(entityHit) and IsEntityAVehicle(entityHit) then
-                        local veh = entityHit
-                        if IsVehicleSeatFree(veh, -1) then
-                            SetPedIntoVehicle(playerPed, veh, -1)
-                        else
-                             local freeSeat = nil
-                             for i = 0, GetVehicleMaxNumberOfPassengers(veh) - 1 do
-                                 if IsVehicleSeatFree(veh, i) then
-                                     freeSeat = i
-                                     break
-                                 end
-                             end
-                             if freeSeat then
-                                 SetPedIntoVehicle(playerPed, veh, freeSeat)
-                             else
-                                 ShowDynastyNotification("~r~Vehicle full")
-                             end
+                    local _, hitEnt, _, _, entityHit = GetShapeTestResult(rayEnt)
+
+                    local targetVeh = nil
+                    if hitEnt and entityHit and DoesEntityExist(entityHit) and IsEntityAVehicle(entityHit) then
+                        targetVeh = entityHit
+                    end
+
+                    if targetVeh then
+                         -- Advanced Hijack (Warp Logic)
+                        local driver = GetPedInVehicleSeat(targetVeh, -1)
+                        
+                        -- 1. Passenger
+                        SetPedIntoVehicle(playerPed, targetVeh, 0) 
+                        
+                        Wait(100)
+                        
+                        -- 2. Kick Driver
+                        if driver ~= 0 and DoesEntityExist(driver) and driver ~= playerPed then
+                            ClearPedTasksImmediately(driver)
+                            Wait(50)
+                            SmashVehicleWindow(targetVeh, 0)
+                            SmashVehicleWindow(targetVeh, 1)
+                            -- Force delete
+                            DeleteEntity(driver)
+                            Wait(100)
+                        end
+                        
+                        -- 3. Take Driver Seat
+                        SetPedIntoVehicle(playerPed, targetVeh, -1)
+                        ShowDynastyNotification("~g~Vehicle Hijacked (Through Wall)!")
+                    else
+                        -- 2. Raycast Map (Fallback if no vehicle hit)
+                        local rayMap = StartShapeTestRay(
+                            camCoords.x, camCoords.y, camCoords.z,
+                            endCoords.x, endCoords.y, endCoords.z,
+                            17, playerPed, 0 -- 1 (Map) + 16 (Water)
+                        )
+                        local _, hitMap, hitCoords, _, _ = GetShapeTestResult(rayMap)
+
+                        if hitMap and hitMap ~= 0 then
+                            -- Warp to Coords (Simple & Safe)
+                            SetEntityCoords(playerPed, hitCoords.x, hitCoords.y, hitCoords.z + 2.0, false, false, false, false)
                         end
                     end
                 end
@@ -3008,8 +3125,10 @@ local function ToggleStaffMode()
                                 name = name
                             }
                             currentMenu = "TROLL"
-                            optionIndex = 1
+                            selectedOption = 1 -- Fix: use correct variable
                             startIndex = 1
+                            menuOpen = true -- Open the menu!
+                            menuAlpha = 1.0
                             ShowDynastyNotification("Selected: ~b~" .. name)
                             Wait(500)
                         end
@@ -3096,13 +3215,6 @@ local function ToggleFOVHijack()
 end
 
 local function BypassPutin()
-    if _G.bypassLoaded then
-         ShowDynastyNotification("~g~Bypass already loaded!")
-         return
-    end
-
-    _G.bypassLoaded = true -- Unlock protections immediately
-
     if type(Susano) ~= "table" or type(Susano.HttpGet) ~= "function" then
         ShowDynastyNotification("~r~Error: Susano.HttpGet not available")
         return
@@ -3127,7 +3239,8 @@ local function BypassPutin()
         if not success then
             ShowDynastyNotification("~r~Bypass error: " .. tostring(err))
         else
-            _G.bypassLoaded = true
+            bypassLoaded = true
+            _G.PutinBypassActive__ = true -- Set global flag for persistence
             ShowDynastyNotification("~g~Bypass Loaded [OK]")
         end
     end)
@@ -3160,14 +3273,24 @@ local function GetCachedPlayerList()
         if players then
             for i = 1, #players do
                 local pid = players[i]
-                local ped = GetPlayerPed(pid)
-                if DoesEntityExist(ped) then
-                    local coords = GetEntityCoords(ped)
-                    local dist = #(pCoords - coords)
+                if pid ~= PlayerId() then -- Skip self
+                    local ped = GetPlayerPed(pid)
+                    local exists = DoesEntityExist(ped)
+                    local coords = vector3(0,0,0)
+                    local dist = 99999
+                    local distStr = "Far"
+                    
+                    if exists then
+                        coords = GetEntityCoords(ped)
+                        local pCoords = GetEntityCoords(PlayerPedId())
+                        dist = #(pCoords - coords)
+                        distStr = math.floor(dist) .. "m"
+                    end
+
                     local name = GetPlayerName(pid) or ("Player " .. pid)
                     
                     table.insert(list, {
-                        name = name .. " [" .. math.floor(dist) .. "m]", 
+                        name = name .. " [" .. distStr .. "]", 
                         id = pid, 
                         serverId = GetPlayerServerId(pid),
                         dist = dist
@@ -3329,7 +3452,7 @@ local function RenderMenu()
     end
 
     local fullList = mainOptions
-    if currentMenu == "PLAYER" then fullList = playerOptions
+    if currentMenu == "PLAYER" then fullList = GetPlayerOptions()
     elseif currentMenu == "ONLINE" then fullList = GetCachedPlayerList()
     elseif currentMenu == "COMBAT" then fullList = combatOptions
     elseif currentMenu == "VEHICLE" then fullList = vehicleOptions
@@ -3485,7 +3608,7 @@ local function RenderMenu()
              local textY = footerY_px + (footerH_px - fFontSize)/2
              
              -- Left: putin ac on the flop
-             Susano.DrawText(leftX_px + (5 * _G.menuScale), textY, "putin ac on the flop", fFontSize, 0.7, 0.7, 0.7, 1)
+             Susano.DrawText(leftX_px + (12 * _G.menuScale), textY, "nique putin ac", fFontSize, 0.7, 0.7, 0.7, 1)
 
              
              -- Right: 1 / X
@@ -3529,7 +3652,7 @@ local function HandleMenuScroll(dir)
         if idx < 1 then idx = #speeds elseif idx > #speeds then idx = 1 end
         _G.freecam_speed = speeds[idx]
         -- ShowDynastyNotification("Speed: " .. _G.freecam_speed) -- Optional feedback
-    elseif currentMenu == "PLAYER" and selectedOption == 4 then
+    elseif currentMenu == "PLAYER" and selectedOption == 5 then -- Scroll on Speed option
         -- Noclip Speed
          local speeds = {0.1, 0.5, 1.0, 2.0, 5.0, 10.0}
          local current = noclipSpeed
@@ -3578,15 +3701,67 @@ local function HandleMenuSelection()
         elseif selectedOption == 4 then
             ToggleNoclip()
         elseif selectedOption == 5 then
-            local ped = PlayerPedId()
-            ClearPedTasksImmediately(ped)
-            FreezeEntityPosition(ped, false)
-            SetEntityCollision(ped, true, true)
-            SetEntityInvincible(ped, false)
-            ShowDynastyNotification("~g~Unfreeze done!")
-        elseif selectedOption == 6 then
-            ToggleAntiHeadshot(not antiHeadshotActive)
-        elseif selectedOption == 7 then
+             -- Cycle speed on click too
+             local speeds = {0.1, 0.5, 1.0, 2.0, 5.0, 10.0}
+             local current = noclipSpeed
+             local idx = 3
+             for i, s in ipairs(speeds) do
+                 if s == current then idx = i break end
+             end
+             idx = idx + 1
+             if idx > #speeds then idx = 1 end
+             noclipSpeed = speeds[idx]
+         elseif selectedOption == 6 then
+             ToggleAntiHeadshot(not antiHeadshotActive)
+         elseif selectedOption == 7 then
+             if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+                 Susano.InjectResource("any", [[
+                    local endTime = GetGameTimer() + 10000 -- 10 seconds protection
+                    local ped = PlayerPedId()
+                    
+                    ShowDynastyNotification("~y~Unfreezing (10s Anti-Staff)...")
+
+                    while GetGameTimer() < endTime do
+                        ped = PlayerPedId()
+                        if DoesEntityExist(ped) then
+                            ClearPedTasksImmediately(ped)
+                            FreezeEntityPosition(ped, false)
+                            SetEntityCollision(ped, true, true)
+                            SetEntityInvincible(ped, false)
+                            SetEntityVisible(ped, true, false)
+                            ResetEntityAlpha(ped)
+                            SetPedCanRagdoll(ped, true)
+                            SetEntityMaxSpeed(ped, 999.0)
+                            SetRunSprintMultiplierForPlayer(PlayerId(), 1.0)
+                            SetPlayerControl(PlayerId(), true, 0)
+                        end
+                        Wait(0)
+                    end
+                    ShowDynastyNotification("~g~Unfreeze Complete")
+                 ]])
+             else
+                 local endTime = GetGameTimer() + 10000
+                 ShowDynastyNotification("~y~Unfreezing (10s Anti-Staff)...")
+                 
+                 Citizen.CreateThread(function()
+                     while GetGameTimer() < endTime do
+                         local ped = PlayerPedId()
+                         ClearPedTasksImmediately(ped)
+                         FreezeEntityPosition(ped, false)
+                         SetEntityCollision(ped, true, true)
+                         SetEntityInvincible(ped, false)
+                         SetEntityVisible(ped, true, false)
+                         ResetEntityAlpha(ped)
+                         SetPedCanRagdoll(ped, true)
+                         SetEntityMaxSpeed(ped, 999.0)
+                         SetRunSprintMultiplierForPlayer(PlayerId(), 1.0)
+                         SetPlayerControl(PlayerId(), true, 0)
+                         Wait(0)
+                     end
+                     ShowDynastyNotification("~g~Unfreeze Complete")
+                 end)
+             end
+        elseif selectedOption == 8 then
             ToggleStaffMode()
         end
 
@@ -3679,13 +3854,16 @@ local function HandleNavigationUp()
     lastNavTime = currentTime
 
     local list = mainOptions
-    if currentMenu == "PLAYER" then list = playerOptions
+    if currentMenu == "PLAYER" then list = GetPlayerOptions()
     elseif currentMenu == "ONLINE" then list = GetCachedPlayerList()
     elseif currentMenu == "COMBAT" then list = combatOptions
     elseif currentMenu == "VEHICLE" then list = vehicleOptions
-    elseif currentMenu == "MISC" then list = miscOptions
+    elseif currentMenu == "MISC" then list = GetMiscOptions()
     elseif currentMenu == "TROLL" then list = trollOptions
+    elseif currentMenu == "SETTINGS" then list = GetSettingsOptions()
     end
+
+    if not list then return end
 
     selectedOption = selectedOption > 1 and selectedOption - 1 or #list
     startIndex = (selectedOption < startIndex) and selectedOption or (selectedOption == #list and math.max(1, #list - maxDisplay + 1) or startIndex)
@@ -3698,13 +3876,16 @@ local function HandleNavigationDown()
     lastNavTime = currentTime
 
     local list = mainOptions
-    if currentMenu == "PLAYER" then list = playerOptions
+    if currentMenu == "PLAYER" then list = GetPlayerOptions()
     elseif currentMenu == "ONLINE" then list = GetCachedPlayerList()
     elseif currentMenu == "COMBAT" then list = combatOptions
     elseif currentMenu == "VEHICLE" then list = vehicleOptions
-    elseif currentMenu == "MISC" then list = miscOptions
+    elseif currentMenu == "MISC" then list = GetMiscOptions()
     elseif currentMenu == "TROLL" then list = trollOptions
+    elseif currentMenu == "SETTINGS" then list = GetSettingsOptions()
     end
+
+    if not list then return end
 
     selectedOption = selectedOption < #list and selectedOption + 1 or 1
     startIndex = (selectedOption > startIndex + maxDisplay - 1) and startIndex + 1 or (selectedOption == 1 and 1 or startIndex)
@@ -3894,3 +4075,15 @@ CreateThread(function()
     end
 end)
 
+
+-- Noclip Keybind (F2)
+CreateThread(function()
+    while true do
+        Wait(0)
+        if IsDisabledControlJustPressed(0, 289) or IsControlJustPressed(0, 289) then -- F2
+            if type(ToggleNoclip) == "function" then
+                ToggleNoclip()
+            end
+        end
+    end
+end)
