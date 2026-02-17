@@ -339,4 +339,25 @@ end
 print("^2✓ Bypass Putin activé^0")
 print("^2[Bypass Putin]^0 Vous pouvez maintenant utiliser le menu en toute sécurité spectate, noclip, godmode etc...")
 _G.PutinBypassActive__ = true -- Global flag for menu detection
+
+-- Heartbeat Loop (For Menu Detection)
+Citizen.CreateThread(function()
+    local decorName = "PutinBypassTime"
+    pcall(DecorRegister, decorName, 3)
+    
+    while true do
+        local time = GetGameTimer()
+        -- 1. State Bag
+        pcall(function() LocalPlayer.state:set('PutinBypassHeartbeat', time, false) end)
+        
+        -- 2. Decorator (Engine Level Share)
+        local ped = PlayerPedId()
+        if DoesEntityExist(ped) then
+            pcall(DecorSetInt, ped, decorName, time)
+        end
+        
+        Wait(1000)
+    end
+end)
+
 end)
