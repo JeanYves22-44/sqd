@@ -1,4 +1,5 @@
 local menuOpen = false
+_G.bypassLoaded = false -- Global bypass flag
 local menuAlpha = 0
 local selectedOption = 1
 local startIndex = 1
@@ -8,6 +9,7 @@ local currentMenu = "MAIN"
 local selectedPlayer = nil
 local attachedPlayers = {}
 local originalCoords = {}
+local menuLastSwitchTime = 0
 local fullGodModeActive = false
 local semiGodModeActive = false
 local forceEngineActive = false
@@ -32,6 +34,11 @@ local lastNavTime = 0
 local normalNavDelay = 200
 local fastNavDelay = 120
 
+-- Settings Globals
+_G.headerImgScaleW = 1.0
+_G.headerImgScaleH = 1.0
+_G.menuScale = 1.0
+
 local KEY_OPEN = 57
 local KEY_SELECT = 191
 local KEY_BACK = 194
@@ -39,6 +46,8 @@ local KEY_UP = 172
 local KEY_DOWN = 173
 local KEY_REVIVE = 73
 local KEY_CARRY = 51
+local KEY_LEFT = 174
+local KEY_RIGHT = 175
 local AK_DIST = 1.0
 
 local mainOptions = {
@@ -58,7 +67,8 @@ local playerOptions = {
     "Solo Session",
     "Noclip",
     "Unfreeze",
-    "Anti Headshot"
+    "Anti Headshot",
+    "Staff Mode"
 }
 
 local antiFreezeActive = false
@@ -73,21 +83,21 @@ local combatOptions = {
 local vehicleOptions = {
     "Fix Vehicle",
     "Max Upgrade",
-    "Kick Vehicle",
     "Bug Vehicle",
-    "Throw Vehicle",
     "Ramp Vehicle",
-    "Carry Vehicle",
     "Easy Handling",
     "Force Engine",
-    "Shift Boost"
+    "Shift Boost",
+    "FOV Warp"
 }
 
-local miscOptions = {
-    "Bypass Putin",
-    "Freecam",
-    "Freecam Speed"
-}
+local function GetMiscOptions()
+    return {
+        "Bypass Putin",
+        "Freecam",
+        "Freecam Speed"
+    }
+end
 
 local moddedWeapons = {
     {name = "weapon_aa", display = "AA"},
@@ -302,9 +312,9 @@ local function StealOutfit()
 
             Wait(100)
 
-            if type(Susano) == "table" and type(Susano.SpoofPed) == "function" then
-                pcall(Susano.SpoofPed, GetEntityModel(myPed), true)
-            end
+            -- if type(Susano) == "table" and type(Susano.SpoofPed) == "function" then
+            --     pcall(Susano.SpoofPed, GetEntityModel(myPed), true)
+            -- end
 
             for componentId = 0, 11 do
                 local drawable = GetPedDrawableVariation(targetPed, componentId)
@@ -323,30 +333,30 @@ local function StealOutfit()
                 end
             end
 
-            local shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix = GetPedHeadBlendData(targetPed)
-            SetPedHeadBlendData(myPed, shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix)
+            -- local shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix = GetPedHeadBlendData(targetPed)
+            -- SetPedHeadBlendData(myPed, shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix)
 
-            for i = 0, 19 do
-                local value = GetPedFaceFeature(targetPed, i)
-                SetPedFaceFeature(myPed, i, value)
-            end
+            -- for i = 0, 19 do
+            --     local value = GetPedFaceFeature(targetPed, i)
+            --     SetPedFaceFeature(myPed, i, value)
+            -- end
 
-            local hairColor, highlightColor = GetPedHairColor(targetPed)
-            SetPedHairColor(myPed, hairColor, highlightColor)
+            -- local hairColor, highlightColor = GetPedHairColor(targetPed)
+            -- SetPedHairColor(myPed, hairColor, highlightColor)
 
-            local eyeColor = GetPedEyeColor(targetPed)
-            SetPedEyeColor(myPed, eyeColor)
+            -- local eyeColor = GetPedEyeColor(targetPed)
+            -- SetPedEyeColor(myPed, eyeColor)
 
-            for overlayId = 0, 12 do
-                local overlayValue, overlayOpacity = GetPedHeadOverlay(targetPed, overlayId)
-                local colorType, colorId, secondColorId = GetPedHeadOverlayColor(targetPed, overlayId)
-                SetPedHeadOverlay(myPed, overlayId, overlayValue, overlayOpacity)
-                if colorType == 1 then
-                    SetPedHeadOverlayColor(myPed, overlayId, colorType, colorId, secondColorId)
-                elseif colorType == 2 then
-                    SetPedHeadOverlayColor(myPed, overlayId, colorType, colorId, secondColorId)
-                end
-            end
+            -- for overlayId = 0, 12 do
+            --     local overlayValue, overlayOpacity = GetPedHeadOverlay(targetPed, overlayId)
+            --     local colorType, colorId, secondColorId = GetPedHeadOverlayColor(targetPed, overlayId)
+            --     SetPedHeadOverlay(myPed, overlayId, overlayValue, overlayOpacity)
+            --     if colorType == 1 then
+            --         SetPedHeadOverlayColor(myPed, overlayId, colorType, colorId, secondColorId)
+            --     elseif colorType == 2 then
+            --         SetPedHeadOverlayColor(myPed, overlayId, colorType, colorId, secondColorId)
+            --     end
+            -- end
         ]], targetServerId))
 
         ShowDynastyNotification("~g~Outfit stolen!")
@@ -362,10 +372,8 @@ local trollOptions = {
     "Black Hole",
     "Steal Outfit",
     "Spectate",
-    "Kick Vehicle (Steal)",
     "Bug Vehicle",
-    "TP to Player",
-    "Vehicle Hijack"
+    "TP to Player"
 }
 
 local function HijackTargetVehicle()
@@ -801,42 +809,107 @@ local fovHijackActive = false
 local fovHijackKey = 0x58
 local fovHijackKeyName = "X"
 
-local notifyActive = false
-local notifyText = ""
-local notifyStartTime = 0
+local dynastyNotifications = {}
 
 function ShowDynastyNotification(text)
-    notifyText = text
-    notifyStartTime = GetGameTimer()
-    notifyActive = true
+    -- Spam Prevention: Check duplicates
+    local count = #dynastyNotifications
+    if count > 0 then
+        local last = dynastyNotifications[count]
+        if last.text == text then
+             -- Refresh duration instead of adding new (Debounce)
+             last.startTime = GetGameTimer()
+             return
+        end
+    end
+    
+    -- Limit Stack Size (keep max 5 active)
+    if count >= 5 then
+        table.remove(dynastyNotifications, 1) -- Remove oldest
+    end
+
+    table.insert(dynastyNotifications, {
+        text = text,
+        startTime = GetGameTimer(),
+        duration = 5000,
+        alpha = 0
+    })
 end
 
 function DrawDynastyNotify()
-    if not notifyActive then return end
-
-    local cur = GetGameTimer()
-    if cur < notifyStartTime + 4000 then
-        local x, y, w, h = 0.12, 0.82, 0.18, 0.05
-        local progress = (notifyStartTime + 4000 - cur) / 4000
-
-        DrawRect(x, y, w, h, 10, 10, 10, 225)
-        DrawRect(x - (w/2) + (w*progress/2), y - (h/2), w*progress, 0.0015, 100, 0, 180, 255)
-
-        SetTextFont(4)
-        SetTextScale(0.3, 0.3)
-        SetTextColour(255, 255, 255, 255)
-        BeginTextCommandDisplayText("STRING")
-        AddTextComponentSubstringPlayerName("~p~D~w~ DYNASTY")
-        EndTextCommandDisplayText(x - w/2 + 0.005, y - h/2 + 0.008)
-
-        SetTextFont(0)
-        SetTextScale(0.32, 0.32)
-        SetTextCentre(false)
-        BeginTextCommandDisplayText("STRING")
-        AddTextComponentSubstringPlayerName(notifyText)
-        EndTextCommandDisplayText(x - w/2 + 0.005, y + 0.005)
-    else
-        notifyActive = false
+    -- Render Queue
+    local currentTime = GetGameTimer()
+    
+    -- Bottom Left Configuration (Above Minimap)
+    local startY = 0.78 -- Base Y pos
+    local gap = 0.06
+    local sw, sh = GetActiveScreenResolution()
+    
+    for i = #dynastyNotifications, 1, -1 do
+        local notif = dynastyNotifications[i]
+        local timeDiff = currentTime - notif.startTime
+        
+        if timeDiff > notif.duration then
+            table.remove(dynastyNotifications, i)
+        else
+            -- Check Susano avalability
+            if Susano and Susano.DrawRectFilled and Susano.DrawText then
+                -- Stack UPWARDS
+                local offsetIndex = (#dynastyNotifications - i)
+                local y = startY - (offsetIndex * gap)
+                local x = 0.015 -- Left margin
+                local w, h = 0.13, 0.05
+                
+                local x_px = x * sw
+                local y_px = y * sh
+                local w_px = w * sw
+                local h_px = h * sh
+                
+                -- Fade logic
+                local alpha = 1.0
+                if timeDiff < 500 then alpha = timeDiff / 500
+                elseif timeDiff > notif.duration - 500 then alpha = (notif.duration - timeDiff) / 500 end
+                
+                -- Background (Black Semi-Transparent)
+                -- Alpha 0.7
+                Susano.DrawRectFilled(x_px, y_px, w_px, h_px, 0, 0, 0, 0.7 * alpha, 8)
+                
+                -- Purple Accent (Left Strip)
+                local stripW = 0.003 * sw
+                -- Reduced Opacity for Purple (0.7)
+                Susano.DrawRectFilled(x_px, y_px, stripW, h_px, 148, 0, 211, 0.7 * alpha, 8) 
+                
+                -- PROGRESS BAR (Top) - Purple
+                -- Calculate width based on remaining time
+                -- Full width = w_px
+                local progress = (notif.duration - timeDiff) / notif.duration
+                if progress < 0 then progress = 0 end
+                local barW_px = w_px * progress
+                local barH_px = 2 -- 2 pixels height
+                
+                -- Draw above background (or at top edge)
+                -- Using y_px as top edge (assuming Susano draws from top-left logic in DrawRectFilled if custom implemented, but typically GTA DrawRect is CENTER based).
+                -- Wait. GTA Native DrawRect is CENTER based. Susano usually mimics imgui (Top-Left).
+                -- RenderMenu calculates x_px as Top-Left?
+                -- "x_px = (baseX - menuWidth/2) * sw" -> This suggests x_px is LEFT edge.
+                -- So Susano.DrawRectFilled(x, y, w, h) likely takes Top-Left X, Y.
+                -- So y_px is top edge.
+                
+                if barW_px > 0 then
+                    Susano.DrawRectFilled(x_px, y_px, barW_px, barH_px, 148, 0, 211, 0.9 * alpha, 0)
+                end
+                
+                -- Title "DYNASTY"
+                Susano.DrawText(x_px + stripW + 10, y_px + 7, "DYNASTY", 14 * _G.menuScale, 0.58, 0, 0.82, 0.8 * alpha)
+                Susano.DrawText(x_px + stripW + 70, y_px + 7, "ANNOUNCEMENT", 12 * _G.menuScale, 1, 1, 1, 0.5 * alpha)
+                
+                -- Content
+                local cleanText = notif.text:gsub("~[a-z]~", "")
+                Susano.DrawText(x_px + stripW + 10, y_px + 28, cleanText, 16 * _G.menuScale, 0.94, 0.94, 0.92, 0.9 * alpha) -- Cream White Text
+            else
+                -- Fallback Native
+            end
+        end
     end
 end
 
@@ -1203,6 +1276,7 @@ function StartFreecam()
     end
 
     freecam_active = true
+    _G.freecam_active = true
     freecam_just_started = true
 
     Citizen.CreateThread(function()
@@ -1220,6 +1294,7 @@ function StopFreecam()
     SetEntityInvincible(ped, false)
     ClearFocus()
     freecam_active = false
+    _G.freecam_active = false
 end
 
 function ForceWorldLoad()
@@ -1519,6 +1594,16 @@ Citizen.CreateThread(function()
             EnableControlAction(0, 15, true)
             EnableControlAction(0, 24, true)
 
+            -- Allow Menu Controls if Open
+            if menuOpen then
+                EnableControlAction(0, 172, true) -- KEY_UP
+                EnableControlAction(0, 173, true) -- KEY_DOWN
+                EnableControlAction(0, 174, true) -- KEY_LEFT
+                EnableControlAction(0, 175, true) -- KEY_RIGHT
+                EnableControlAction(0, 191, true) -- KEY_SELECT
+                EnableControlAction(0, 194, true) -- KEY_BACK
+            end
+
             if not menuOpen then
                 HandleInputMenu()
             end
@@ -1551,6 +1636,7 @@ fast_speed = freecam_speed * 5.0
 -- Toggle from menu
 function ToggleSusanoFreecam()
     freecam_active = not freecam_active
+    _G.freecam_active = freecam_active
     if freecam_active then
         StartFreecam()
         FreecamSelectedOption = 1
@@ -1724,53 +1810,43 @@ local function MaxUpgradeVehicle()
         
         SetVehicleFixed(veh)
         SetVehicleDeformationFixed(veh)
+        SetVehicleDirtLevel(veh, 0.0)
         
-        local engineMods = GetNumVehicleMods(veh, 11)
-        if engineMods > 0 then
-            SetVehicleMod(veh, 11, engineMods - 1, false)
+        -- Performance & Cosmetics (Loop all except Livery/Stickers)
+        SetVehicleModKit(veh, 0)
+        for i = 0, 49 do
+            if i ~= 48 then -- Skip Livery/Stickers
+                local numMods = GetNumVehicleMods(veh, i)
+                if numMods > 0 then
+                    SetVehicleMod(veh, i, numMods - 1, false)
+                end
+            end
         end
+
+        -- Toggles
+        ToggleVehicleMod(veh, 18, true) -- Turbo
+        ToggleVehicleMod(veh, 20, true) -- Tire Smoke
+        ToggleVehicleMod(veh, 22, true) -- Xenon
+
+        -- Colors (Optional: Set to nice colors or keep?)
+        -- User said "full custom". Usually implies maxing stats.
+        -- We won't change paint colors forceably unless requested, but we set neon/xenon.
         
-        local brakeMods = GetNumVehicleMods(veh, 12)
-        if brakeMods > 0 then
-            SetVehicleMod(veh, 12, brakeMods - 1, false)
-        end
-        
-        local transmissionMods = GetNumVehicleMods(veh, 13)
-        if transmissionMods > 0 then
-            SetVehicleMod(veh, 13, transmissionMods - 1, false)
-        end
-        
-        local suspensionMods = GetNumVehicleMods(veh, 15)
-        if suspensionMods > 0 then
-            SetVehicleMod(veh, 15, suspensionMods - 1, false)
-        end
-        
-        local armorMods = GetNumVehicleMods(veh, 16)
-        if armorMods > 0 then
-            SetVehicleMod(veh, 16, armorMods - 1, false)
-        end
-        
-        local spoilerMods = GetNumVehicleMods(veh, 0)
-        if spoilerMods > 0 then
-            SetVehicleMod(veh, 0, spoilerMods - 1, false)
-        end
-        
-        ToggleVehicleMod(veh, 18, true)
-        ToggleVehicleMod(veh, 22, true)
-        
+        -- Neon
         SetVehicleNeonLightEnabled(veh, 0, true)
         SetVehicleNeonLightEnabled(veh, 1, true)
         SetVehicleNeonLightEnabled(veh, 2, true)
         SetVehicleNeonLightEnabled(veh, 3, true)
-        SetVehicleNeonLightsColour(veh, 255, 0, 255)
+        SetVehicleNeonLightsColour(veh, 255, 0, 255) -- Purple (Dynasty style)
         
+        -- Max Stats
         SetVehicleEngineHealth(veh, 1000.0)
         SetVehicleBodyHealth(veh, 1000.0)
         SetVehiclePetrolTankHealth(veh, 1000.0)
         
-        SetVehicleWindowTint(veh, 1)
+        SetVehicleWindowTint(veh, 1) -- Pure Black
         
-        ShowDynastyNotification("Vehicle: ~g~MAX UPGRADED ~p~(Performance + Style)")
+        ShowDynastyNotification("Vehicle: ~g~MAX UPGRADED ~p~(Full Custom - No Stickers)")
     else
         ShowDynastyNotification("~r~Not in vehicle")
     end
@@ -2235,6 +2311,7 @@ local function ChangeSusanoFreecamKeybind()
 end
 
 local function LaunchPlayer()
+    if not _G.bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
     if not selectedPlayer then 
         ShowDynastyNotification("~r~No player selected")
         return 
@@ -2309,6 +2386,7 @@ local function LaunchPlayer()
 end
 
 local function LunchPlayer2()
+    if not _G.bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
     local myPed = PlayerPedId()
     if not myPed then return end
 
@@ -2492,6 +2570,8 @@ local function DetachPlayer(id)
     ShowDynastyNotification("Player detached")
 end
 
+local spectateActive = false
+
 local function AttachPlayerToMe(id)
     if not id then return end
 
@@ -2500,16 +2580,31 @@ local function AttachPlayerToMe(id)
         if attachedPlayers[id] then
             DetachPlayer(id)
         else
-            local coords = GetEntityCoords(ped)
-            if coords and coords.x and coords.y and coords.z then
-                attachedPlayers[id] = ped
-                originalCoords[id] = coords
-                
-                SetEntityCollision(ped, false, false)
-                
-                ShowDynastyNotification("Player attached")
-            end
+            attachedPlayers[id] = ped
+            originalCoords[id] = GetEntityCoords(ped)
+            
+            SetEntityCollision(ped, false, false)
+            
+            -- Thread to keep them attached
+            CreateThread(function()
+                while attachedPlayers[id] and DoesEntityExist(attachedPlayers[id]) do
+                    local myPed = PlayerPedId()
+                    local myCoords = GetEntityCoords(myPed)
+                    local myForward = GetEntityForwardVector(myPed)
+                    
+                    -- Attach in front
+                    local attachPos = myCoords + (myForward * 0.5) + vector3(0, 0, 0.5)
+                    
+                    SetEntityCoordsNoOffset(attachedPlayers[id], attachPos.x, attachPos.y, attachPos.z, false, false, false)
+                    SetEntityHeading(attachedPlayers[id], GetEntityHeading(myPed))
+                    Wait(0)
+                end
+            end)
+            
+            ShowDynastyNotification("Player attached")
         end
+    else
+        ShowDynastyNotification("~r~Player not found (too far?)")
     end
 end
 
@@ -2521,6 +2616,71 @@ local function ToggleAttachPlayer()
     else
         AttachPlayerToMe(selectedPlayer.id)
     end
+end
+
+local function ToggleSpectate(enable)
+    if not _G.bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
+    if not selectedPlayer then return end
+    
+    local targetPed = GetPlayerPed(selectedPlayer.id)
+    
+    if not DoesEntityExist(targetPed) then
+        -- Attempt focus to load them?
+        local myPed = PlayerPedId()
+        NetworkSetInSpectatorMode(false, myPed) -- Ensure off
+        spectateActive = false
+        ShowDynastyNotification("~r~Target not found locally")
+        return
+    end
+
+    spectateActive = enable
+    NetworkSetInSpectatorMode(enable, targetPed)
+    
+    if enable then
+        ShowDynastyNotification("Spectating: ~g~ON")
+    else
+        ShowDynastyNotification("Spectating: ~r~OFF")
+    end
+end
+
+local function TeleportToPlayer()
+    if not _G.bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
+    if not selectedPlayer then return end
+    local targetPed = GetPlayerPed(selectedPlayer.id)
+    
+    -- Direct method
+    if DoesEntityExist(targetPed) then
+        local coords = GetEntityCoords(targetPed)
+        if coords ~= vector3(0,0,0) then
+            SetEntityCoords(PlayerPedId(), coords.x, coords.y, coords.z + 1.0, false, false, false, false)
+            ShowDynastyNotification("~g~Teleported!")
+            return
+        end
+    end
+
+    -- Indirect method: Spectate to load
+    ShowDynastyNotification("~y~Target not streamed, forcing load...")
+    
+    NetworkSetInSpectatorMode(true, targetPed)
+    
+    CreateThread(function()
+        local attempts = 0
+        while attempts < 20 do
+            Wait(100)
+            if DoesEntityExist(targetPed) then
+                local coords = GetEntityCoords(targetPed)
+                if coords ~= vector3(0,0,0) then
+                    NetworkSetInSpectatorMode(false, targetPed)
+                    SetEntityCoords(PlayerPedId(), coords.x, coords.y, coords.z + 1.0, false, false, false, false)
+                    ShowDynastyNotification("~g~Teleported (Far)!")
+                    return
+                end
+            end
+            attempts = attempts + 1
+        end
+        NetworkSetInSpectatorMode(false, targetPed)
+        ShowDynastyNotification("~r~Failed to load target")
+    end)
 end
 
 local function ToggleBlackHole()
@@ -2718,62 +2878,148 @@ local function StealOutfit()
         return
     end
 
-    local outfit = {
-        sex = IsPedMale(targetPed) and 0 or 1,
-        face = GetPedDrawableVariation(targetPed, 0),
-        skin = GetPedDrawableVariation(targetPed, 1),
-        hair_1 = GetPedDrawableVariation(targetPed, 2),
-        hair_2 = GetPedTextureVariation(targetPed, 2),
-        hair_color_1 = GetPedHairColor(targetPed),
-        hair_color_2 = GetPedHairHighlightColor(targetPed),
-        tshirt_1 = GetPedDrawableVariation(targetPed, 8),
-        tshirt_2 = GetPedTextureVariation(targetPed, 8),
-        torso_1 = GetPedDrawableVariation(targetPed, 11),
-        torso_2 = GetPedTextureVariation(targetPed, 11),
-        arms = GetPedDrawableVariation(targetPed, 3),
-        pants_1 = GetPedDrawableVariation(targetPed, 4),
-        pants_2 = GetPedTextureVariation(targetPed, 4),
-        shoes_1 = GetPedDrawableVariation(targetPed, 6),
-        shoes_2 = GetPedTextureVariation(targetPed, 6),
-        mask_1 = GetPedDrawableVariation(targetPed, 1),
-        mask_2 = GetPedTextureVariation(targetPed, 1),
-        helmet_1 = GetPedPropIndex(targetPed, 0),
-        helmet_2 = GetPedPropTextureIndex(targetPed, 0),
-        bproof_1 = GetPedDrawableVariation(targetPed, 9),
-        bproof_2 = GetPedTextureVariation(targetPed, 9),
-        bags_1 = GetPedDrawableVariation(targetPed, 5),
-        bags_2 = GetPedTextureVariation(targetPed, 5),
-        beard_1 = GetPedDrawableVariation(targetPed, 1),
-        beard_2 = GetPedTextureVariation(targetPed, 1),
-        chain_1 = GetPedDrawableVariation(targetPed, 7),
-        chain_2 = GetPedTextureVariation(targetPed, 7),
-        glasses_1 = GetPedPropIndex(targetPed, 1),
-        glasses_2 = GetPedPropTextureIndex(targetPed, 1),
-        decals_1 = GetPedDrawableVariation(targetPed, 10),
-        decals_2 = GetPedTextureVariation(targetPed, 10),
-        beard_3 = 0,
-        beard_4 = 0
-    }
-
     local myPed = PlayerPedId()
-    local wasInvincible = GetPlayerInvincible(PlayerId())
-    SetPlayerInvincible(PlayerId(), true)
+    
+    -- Copy Ped Model first if needed (optional, assuming same model for now or just components)
+    -- If models are different (Male/Female), components won't match well.
+    -- But usually StealOutfit implies copying clothes.
+    
+    -- Copy Components
+    for i = 0, 11 do
+        local drawable = GetPedDrawableVariation(targetPed, i)
+        local texture = GetPedTextureVariation(targetPed, i)
+        local palette = GetPedPaletteVariation(targetPed, i)
+        SetPedComponentVariation(myPed, i, drawable, texture, palette)
+    end
 
-    TriggerEvent('skinchanger:loadSkin', outfit)
-
-    CreateThread(function()
-        Wait(500)
-        local ped = PlayerPedId()
-        SetEntityHealth(ped, GetEntityMaxHealth(ped))
-        ClearPedBloodDamage(ped)
-        ResetPedVisibleDamage(ped)
-        
-        if not wasInvincible then
-            SetPlayerInvincible(PlayerId(), false)
+    -- Copy Props
+    for i = 0, 7 do
+        local propIndex = GetPedPropIndex(targetPed, i)
+        local propTexture = GetPedPropTextureIndex(targetPed, i)
+        if propIndex ~= -1 then
+            SetPedPropIndex(myPed, i, propIndex, propTexture, true)
+        else
+            ClearPedProp(myPed, i)
         end
-    end)
+    end
 
-    ShowDynastyNotification("~g~Outfit stolen!")
+    -- Fix Health/Damage visual
+    ClearPedBloodDamage(myPed)
+    ResetPedVisibleDamage(myPed)
+
+    ShowDynastyNotification("~g~Outfit stolen (Native)!")
+end
+
+local fovWarpActive = false
+
+local function ToggleFOVWarp()
+    fovWarpActive = not fovWarpActive
+    
+    if fovWarpActive then
+        ShowDynastyNotification("FOV Warp: ~g~ON~w~ | Press ~p~E~w~ to warp")
+        
+        CreateThread(function()
+            while fovWarpActive do
+                Wait(0)
+                
+                if IsControlJustPressed(0, 51) then -- E key
+                    local playerPed = PlayerPedId()
+                    local camCoords = GetGameplayCamCoord()
+                    local camRot = GetGameplayCamRot(2)
+                    
+                    local fwd = vector3(
+                        -math.sin(math.rad(camRot.z)) * math.abs(math.cos(math.rad(camRot.x))),
+                        math.cos(math.rad(camRot.z)) * math.abs(math.cos(math.rad(camRot.x))),
+                        math.sin(math.rad(camRot.x))
+                    )
+                    
+                    local endCoords = camCoords + (fwd * 1000.0)
+                    
+                    local ray = StartShapeTestRay(
+                        camCoords.x, camCoords.y, camCoords.z,
+                        endCoords.x, endCoords.y, endCoords.z,
+                        10, playerPed, 0
+                    )
+                    
+                    local _, hit, hitCoords, _, entityHit = GetShapeTestResult(ray)
+                    
+                    if hit and entityHit and DoesEntityExist(entityHit) and IsEntityAVehicle(entityHit) then
+                        local veh = entityHit
+                        if IsVehicleSeatFree(veh, -1) then
+                            SetPedIntoVehicle(playerPed, veh, -1)
+                        else
+                             local freeSeat = nil
+                             for i = 0, GetVehicleMaxNumberOfPassengers(veh) - 1 do
+                                 if IsVehicleSeatFree(veh, i) then
+                                     freeSeat = i
+                                     break
+                                 end
+                             end
+                             if freeSeat then
+                                 SetPedIntoVehicle(playerPed, veh, freeSeat)
+                             else
+                                 ShowDynastyNotification("~r~Vehicle full")
+                             end
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        ShowDynastyNotification("FOV Warp: ~r~OFF")
+    end
+end
+
+local staffModeActive = false
+
+local function ToggleStaffMode()
+    staffModeActive = not staffModeActive
+    if staffModeActive then
+        ShowDynastyNotification("Staff Mode: ~g~ON ~w~(Shoot player to open menu)")
+        
+        CreateThread(function()
+            while staffModeActive do
+                Wait(0)
+                local ped = PlayerPedId()
+                if IsPedShooting(ped) then
+                    local found, coords = GetPedLastWeaponImpactCoord(ped)
+                    if found then
+                        local peds = GetGamePool("CPed")
+                        local closestPed = nil
+                        local minDst = 2.0
+                        for _, p in ipairs(peds) do
+                            if p ~= ped and IsPedAPlayer(p) then
+                                local dst = #(GetEntityCoords(p) - coords)
+                                if dst < minDst then
+                                    minDst = dst
+                                    closestPed = p
+                                end
+                            end
+                        end
+                        
+                        if closestPed then
+                            local pId = NetworkGetPlayerIndexFromPed(closestPed)
+                            local sId = GetPlayerServerId(pId)
+                            local name = GetPlayerName(pId)
+                            
+                            selectedPlayer = {
+                                id = pId,
+                                serverId = sId,
+                                name = name
+                            }
+                            currentMenu = "TROLL"
+                            optionIndex = 1
+                            startIndex = 1
+                            ShowDynastyNotification("Selected: ~b~" .. name)
+                            Wait(500)
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        ShowDynastyNotification("Staff Mode: ~r~OFF")
+    end
 end
 
 local function ToggleFOVHijack()
@@ -2850,6 +3096,13 @@ local function ToggleFOVHijack()
 end
 
 local function BypassPutin()
+    if _G.bypassLoaded then
+         ShowDynastyNotification("~g~Bypass already loaded!")
+         return
+    end
+
+    _G.bypassLoaded = true -- Unlock protections immediately
+
     if type(Susano) ~= "table" or type(Susano.HttpGet) ~= "function" then
         ShowDynastyNotification("~r~Error: Susano.HttpGet not available")
         return
@@ -2871,13 +3124,105 @@ local function BypassPutin()
             load(bypassCode)()
         end)
 
-        if success then
-            ShowDynastyNotification("~g~Putin bypass loaded successfully!")
-        else
+        if not success then
             ShowDynastyNotification("~r~Bypass error: " .. tostring(err))
+        else
+            _G.bypassLoaded = true
+            ShowDynastyNotification("~g~Bypass Loaded [OK]")
         end
     end)
 end
+
+local function GetSettingsOptions()
+    return {
+        "Menu Size: " .. string.format("%.2f", _G.menuScale),
+        "Reset Size"
+    }
+end
+
+local gengarTex, gengarW, gengarH
+
+local cachedPlayerList = {}
+local lastPlayerListUpdate = 0
+
+local function GetCachedPlayerList()
+    local success, result = pcall(function()
+        local currentTime = GetGameTimer()
+        if currentTime - lastPlayerListUpdate < 1000 and #cachedPlayerList > 0 then
+            return cachedPlayerList
+        end
+        
+        lastPlayerListUpdate = currentTime
+        local players = GetActivePlayers()
+        local pCoords = GetEntityCoords(PlayerPedId())
+        
+        local list = {}
+        if players then
+            for i = 1, #players do
+                local pid = players[i]
+                local ped = GetPlayerPed(pid)
+                if DoesEntityExist(ped) then
+                    local coords = GetEntityCoords(ped)
+                    local dist = #(pCoords - coords)
+                    local name = GetPlayerName(pid) or ("Player " .. pid)
+                    
+                    table.insert(list, {
+                        name = name .. " [" .. math.floor(dist) .. "m]", 
+                        id = pid, 
+                        serverId = GetPlayerServerId(pid),
+                        dist = dist
+                    })
+                end
+            end
+            table.sort(list, function(a,b) return (a.dist or 0) < (b.dist or 0) end)
+        end
+        return list
+    end)
+
+    if success then
+        cachedPlayerList = result
+        return result
+    else
+        ShowDynastyNotification("~r~List Error: " .. tostring(result)) -- Debug
+        return cachedPlayerList
+    end
+end
+
+-- Alias for compatibility (Fixes 'launch un joueur au pif' mismatch)
+local GetDisplayedPlayerList = GetCachedPlayerList -- Ensures logic uses same list as render
+
+CreateThread(function()
+    Wait(500) -- Small delay for Susano init
+    
+    -- Load Gengar image from local file (as requested)
+    pcall(function()
+        if not Susano or not Susano.LoadTexture then return end
+        
+        local localPath = "c:/Users/Jean-Yves/Desktop/test/image.jpeg"
+        local tex, w, h = Susano.LoadTexture(localPath)
+        
+        if tex then
+            gengarTex, gengarW, gengarH = tex, w, h
+            ShowDynastyNotification("~g~Local Image Loaded!")
+        else
+            ShowDynastyNotification("~y~Image not found locally")
+        end
+    end)
+
+    -- Load Custom Font (pcall protected)
+    pcall(function()
+        if Susano and Susano.LoadFont then
+            local id, err = Susano.LoadFont("C:/Windows/Fonts/arialbd.ttf", 20)
+            if id then
+                _G.menuFontId = id
+                ShowDynastyNotification("~g~Custom Font Loaded")
+            else
+                id, err = Susano.LoadFont("C:/Windows/Fonts/segoeui.ttf", 20)
+                if id then _G.menuFontId = id end
+            end
+        end
+    end)
+end)
 
 
 local function RenderMenu()
@@ -2887,27 +3232,70 @@ local function RenderMenu()
     local a = menuAlpha
 
     local baseX = 0.13
-    local menuWidth = 0.20
-    local optionHeight = 0.035
-    local headerImgHeight = 0.12
-    local titleBarHeight = 0.03
+    local menuScale = _G.menuScale or 1.0
+    local menuWidth = 0.14 * menuScale -- Reduced from 0.20 to matches screen
+    local optionHeight = 0.035 * menuScale
+    local headerImgHeight = 0.12 * menuScale
+    local titleBarHeight = 0.03 * menuScale
     local headerTotalHeight = headerImgHeight + titleBarHeight
     local headerTopY = 0.08
-
     local imgCenterY = headerTopY + headerImgHeight / 2
-    DrawRect(baseX, imgCenterY, menuWidth, headerImgHeight, 15, 15, 20, math.floor(a * 0.95))
-
-    SetTextFont(1)
-    SetTextScale(1.0, 1.0)
-    SetTextColour(255, 255, 255, a)
-    SetTextCentre(true)
-    SetTextDropShadow()
-    BeginTextCommandDisplayText("STRING")
-    AddTextComponentSubstringPlayerName("~p~GENGAR ~w~v3")
-    EndTextCommandDisplayText(baseX, imgCenterY - 0.02)
-
     local titleBarY = headerTopY + headerImgHeight + titleBarHeight / 2
-    DrawRect(baseX, titleBarY, menuWidth, titleBarHeight, 25, 25, 30, math.floor(a * 0.95))
+
+    -- Calculate pixel coordinates for Susano
+    local sw, sh = GetActiveScreenResolution()
+    local x_px = (baseX - menuWidth/2) * sw
+    local y_px = headerTopY * sh
+    local w_px = menuWidth * sw
+    local h_px = headerImgHeight * sh
+    
+    -- Draw Header Background (Black)
+    if Susano and Susano.DrawRectFilled then
+        -- DrawRectFilled(x, y, w, h, r, g, b, a, rounding)
+        Susano.DrawRectFilled(x_px, y_px, w_px, h_px, 0, 0, 0, 1.0, 10)
+    else
+        -- Fallback Native
+        DrawRect(baseX, imgCenterY, menuWidth, headerImgHeight, 0, 0, 0, 255)
+    end
+
+    -- Draw Image (Gengar)
+    if gengarTex and Susano and Susano.DrawImage then
+        -- Full header fill (no borders)
+        local imgW = w_px * _G.headerImgScaleW
+        local imgH = h_px * _G.headerImgScaleH
+        
+        local imgX = x_px + (w_px - imgW) / 2
+        local imgY = y_px + (h_px - imgH) / 2
+        
+        -- DrawImage(id, x, y, w, h, r,g,b,a, rounding, u0,v0,u1,v1)
+        Susano.DrawImage(gengarTex, imgX, imgY, imgW, imgH, 1,1,1,1, 10, 0,0,1,1)
+    elseif not gengarTex then
+         -- Text fallback
+        SetTextFont(1)
+        SetTextScale(1.0, 1.0)
+        SetTextColour(255, 255, 255, a)
+        SetTextCentre(true)
+        SetTextDropShadow()
+        BeginTextCommandDisplayText("STRING")
+        AddTextComponentSubstringPlayerName("~p~GENGAR ~w~v3")
+        EndTextCommandDisplayText(baseX, imgCenterY - 0.02)
+    end
+    
+    -- Draw Gradient Bar (Purple separator)
+    local barH = titleBarHeight * sh
+    local barY = y_px + h_px
+    if Susano and Susano.DrawRectGradient then
+        -- DrawRectGradient(x, y, w, h, r1,g1,b1,a1 ... rounding)
+        -- Purple: 148, 0, 211 (DarkViolet) -> 0.58, 0, 0.82
+        -- User requested Black Transparent for Main Menu bar (no purple)
+        Susano.DrawRectFilled(x_px, barY, w_px, barH, 0, 0, 0, 0.75, 0)
+        
+        -- We also need to draw the "Main Menu" text on top of this bar or below?
+        -- Screen shows "Main Menu" text.
+    else
+        -- Fallback Native
+        DrawRect(baseX, titleBarY, menuWidth, titleBarHeight, 148, 0, 211, 255)
+    end
 
     local subtitle = "Main Menu"
     if currentMenu == "PLAYER" then subtitle = "Player"
@@ -2920,47 +3308,84 @@ local function RenderMenu()
     elseif currentMenu == "SETTINGS" then subtitle = "Settings"
     end
 
-    SetTextFont(4)
-    SetTextScale(0.35, 0.35)
-    SetTextColour(255, 255, 255, a)
-    SetTextCentre(true)
-    BeginTextCommandDisplayText("STRING")
-    AddTextComponentSubstringPlayerName(subtitle)
-    EndTextCommandDisplayText(baseX, titleBarY - 0.012)
+    if Susano and Susano.DrawText and Susano.GetTextWidth then
+        -- Draw text centered in the gradient bar
+        local fontSize = 18 -- px
+        local textW = Susano.GetTextWidth(subtitle, fontSize)
+        local textX = x_px + (w_px - textW) / 2
+        -- Center vertically in bar: barY + (barH - fontSize)/2 ? Approximately.
+        local textY = barY + (barH - fontSize) / 2
+        
+        -- Cream White Subtitle (0.94, 0.94, 0.92)
+        Susano.DrawText(textX, textY, subtitle, fontSize, 0.94, 0.94, 0.92, 1)
+    else
+        SetTextFont(4)
+        SetTextScale(0.35, 0.35)
+        SetTextColour(255, 255, 255, a)
+        SetTextCentre(true)
+        BeginTextCommandDisplayText("STRING")
+        AddTextComponentSubstringPlayerName(subtitle)
+        EndTextCommandDisplayText(baseX, titleBarY - 0.012)
+    end
 
     local fullList = mainOptions
     if currentMenu == "PLAYER" then fullList = playerOptions
-    elseif currentMenu == "ONLINE" then fullList = GetDisplayedPlayerList()
+    elseif currentMenu == "ONLINE" then fullList = GetCachedPlayerList()
     elseif currentMenu == "COMBAT" then fullList = combatOptions
     elseif currentMenu == "VEHICLE" then fullList = vehicleOptions
     elseif currentMenu == "VISUAL" then fullList = visualOptions
-    elseif currentMenu == "MISC" then fullList = miscOptions
+    elseif currentMenu == "MISC" then fullList = GetMiscOptions()
     elseif currentMenu == "TROLL" then fullList = trollOptions
+    elseif currentMenu == "SETTINGS" then fullList = GetSettingsOptions()
     end
 
     local displayCount = math.min(#fullList, maxDisplay)
-    local listTopY = headerTopY + headerTotalHeight
+    local listTopY = headerTopY + headerTotalHeight + (0.005 * menuScale) -- Gap
     local listHeight = displayCount * optionHeight
+
+    -- Calculate pixels for list
+    local sw, sh = GetActiveScreenResolution()
+    local listTop_px = listTopY * sh
+    local optH_px = optionHeight * sh
+    local menuW_px = menuWidth * sw
+    local leftX_px = (baseX - menuWidth/2) * sw
+    
+    -- Background for entire list? Or per option. Native did per option.
+    -- Let's do per option for selection effect.
 
     for i = 0, displayCount - 1 do
         local index = startIndex + i
         local data = fullList[index]
 
         if data then
-            local rowCenterY = listTopY + (i * optionHeight) + (optionHeight / 2)
+            local rowY_px = listTop_px + (i * optH_px)
             local isSelected = (selectedOption == index)
 
-            if isSelected then
-                DrawRect(baseX - menuWidth/4, rowCenterY, menuWidth/2, optionHeight, 100, 0, 180, math.floor(a * 0.5))
-                DrawRect(baseX + menuWidth/4, rowCenterY, menuWidth/2, optionHeight, 50, 0, 90, math.floor(a * 0.4))
+            if Susano and Susano.DrawRectFilled then
+                if isSelected then
+                    -- Purple Gradient Selection
+                    -- DrawRectGradient(x, y, w, h, r1,g1,b1,a1 ... rounding)
+                    -- Left: Purple, Right: Darker/Black?
+                    -- Screen shows solid purple or slight gradient.
+                    local r,g,b = 0.58, 0.0, 0.82 -- Purple
+                    local r2,g2,b2 = 0.3, 0.0, 0.5 -- Darker Purple
+                    -- Alpha reduced to 0.75 as requested
+                    Susano.DrawRectGradient(leftX_px, rowY_px, menuW_px, optH_px, r,g,b,0.75, r2,g2,b2,0.75, r2,g2,b2,0.75, r,g,b,0.75, 0)
+                else
+                    -- Normal Background (Transparent Black)
+                    Susano.DrawRectFilled(leftX_px, rowY_px, menuW_px, optH_px, 0, 0, 0, 0.6, 0)
+                end
             else
-                DrawRect(baseX, rowCenterY, menuWidth, optionHeight, 20, 20, 25, math.floor(a * 0.85))
+                -- Fallback Native
+                local rowCenterY = listTopY + (i * optionHeight) + (optionHeight / 2)
+                 if isSelected then
+                    DrawRect(baseX, rowCenterY, menuWidth, optionHeight, 148, 0, 211, math.floor(a * 0.8))
+                else
+                    DrawRect(baseX, rowCenterY, menuWidth, optionHeight, 20, 20, 25, math.floor(a * 0.85))
+                end
             end
 
-            if i < displayCount - 1 then
-                DrawRect(baseX, rowCenterY + optionHeight/2, menuWidth, 0.001, 50, 50, 55, math.floor(a * 0.5))
-            end
-
+            -- Prepare Label
             local label = ""
             local hasSubmenu = false
             if currentMenu == "MAIN" then hasSubmenu = true end
@@ -2980,19 +3405,17 @@ local function RenderMenu()
             elseif currentMenu == "MISC" and index == 2 then
                 label = "Freecam " .. (_G.freecam_active and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "MISC" and index == 3 then
-                label = "Freecam Speed: ~b~" .. tostring(_G.freecam_speed or 0.5)
-            elseif currentMenu == "VEHICLE" and index == 5 then
-                label = "Throw Vehicle " .. (throwVehicleActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 6 then
+                label = "Freecam Speed: " .. tostring(_G.freecam_speed or 0.5)
+            elseif currentMenu == "VEHICLE" and index == 4 then
                 label = "Ramp Vehicle " .. (rampVehicleActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 7 then
-                label = "Carry Vehicle " .. (carryActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 8 then
+            elseif currentMenu == "VEHICLE" and index == 5 then
                 label = "Easy Handling " .. (easyHandlingActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 9 then
+            elseif currentMenu == "VEHICLE" and index == 6 then
                 label = "Force Engine " .. (forceEngineActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 10 then
+            elseif currentMenu == "VEHICLE" and index == 7 then
                 label = "Shift Boost " .. (shiftBoostActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "VEHICLE" and index == 8 then
+                label = "FOV Warp " .. (fovWarpActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "TROLL" and index == 2 then
                 label = "Launch Player V2"
             elseif currentMenu == "TROLL" and index == 3 then
@@ -3001,61 +3424,123 @@ local function RenderMenu()
             elseif currentMenu == "TROLL" and index == 4 then
                 label = "Black Hole " .. (blackHoleActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "ONLINE" then
-                label = string.format("[%d] %s (%dm)", data.serverId, data.name, data.dist)
+                label = string.format("[%d] %s (%dm)", data.serverId, data.name, math.floor(data.dist))
                 hasSubmenu = true
-                if data.inVeh then
-                    if not HasStreamedTextureDictLoaded("commonmenu") then
-                        RequestStreamedTextureDict("commonmenu", false)
-                    end
-                    DrawSprite("commonmenu", "mp_spec_veh", baseX + menuWidth/2 - 0.025, rowCenterY, 0.015, 0.025, 0.0, 255, 255, 255, a)
-                end
+                 -- Skipping Sprite for Susano
             else
                 label = (type(data) == "table" and data.name or data)
             end
 
-            local textR, textG, textB = 255, 255, 255
-            if not isSelected then
-                textR, textG, textB = 200, 200, 200
-            end
+            -- Clean Colors for Susano (Remove ~g~ etc? Susano doesn't support them natively unless custom func)
+            -- We assume Susano.DrawText supports standard rendering.
+            -- If not, we might see raw codes.
+            -- Let's stick to simple text or strip codes if needed.
+            -- The Native DrawText supports codes. Susano usually doesn't.
+            -- Replacing ~g~ with empty string for Susano?
+            -- Actually let's assume raw text for now.
 
-            SetTextFont(4)
-            SetTextScale(0.32, 0.32)
-            SetTextColour(textR, textG, textB, a)
-            BeginTextCommandDisplayText("STRING")
-            AddTextComponentSubstringPlayerName(label)
-            EndTextCommandDisplayText(baseX - menuWidth/2 + 0.008, rowCenterY - 0.012)
+            if Susano and Susano.DrawText then
+                -- Text Position
+                local fontSize = 16 * _G.menuScale -- Scaled font
+                if fontSize < 12 then fontSize = 12 end
+                
+                local textX = leftX_px + (12 * _G.menuScale) -- Padding (was 5)
+                local textY = rowY_px + (optH_px - fontSize)/2
+                
+                -- Remove color codes for Susano (basic strip)
+                local cleanLabel = label:gsub("~[a-z]~", "")
+                
+                Susano.DrawText(textX, textY, cleanLabel, fontSize, 0.94, 0.94, 0.92, 1)
+                
+                if hasSubmenu then
+                    local arrowX = leftX_px + menuW_px - (20 * _G.menuScale)
+                    Susano.DrawText(arrowX, textY, ">", fontSize, 0.94, 0.94, 0.92, 1)
+                    
 
-            if hasSubmenu then
+                end
+            else
+                -- Fallback Native
+                local rowCenterY = listTopY + (i * optionHeight) + (optionHeight / 2)
                 SetTextFont(4)
                 SetTextScale(0.32, 0.32)
-                SetTextColour(textR, textG, textB, a)
+                SetTextColour(255, 255, 255, a)
                 BeginTextCommandDisplayText("STRING")
-                AddTextComponentSubstringPlayerName(">")
-                EndTextCommandDisplayText(baseX + menuWidth/2 - 0.015, rowCenterY - 0.012)
+                AddTextComponentSubstringPlayerName(label)
+                EndTextCommandDisplayText(baseX - menuWidth/2 + 0.008, rowCenterY - 0.012)
             end
         end
     end
 
-    if #fullList > maxDisplay then
-        local footerY = listTopY + listHeight + 0.012
+    -- Footer
+    if true then
+        local footerGap = (0.005 * menuScale) * sh
+        local footerY_px = listTop_px + (displayCount * optH_px) + footerGap
+        local footerH_px = titleBarHeight * sh -- Match header height
+        
         local footerText = string.format("%d / %d", selectedOption, #fullList)
-        SetTextFont(4)
-        SetTextScale(0.28, 0.28)
-        SetTextColour(180, 180, 180, a)
-        SetTextCentre(true)
-        BeginTextCommandDisplayText("STRING")
-        AddTextComponentSubstringPlayerName(footerText)
-        EndTextCommandDisplayText(baseX, footerY)
-    end
+        
+        if Susano and Susano.DrawRectFilled and Susano.DrawText then
+             Susano.DrawRectFilled(leftX_px, footerY_px, menuW_px, footerH_px, 0, 0, 0, 0.75, 0)
+             local fFontSize = 14 * _G.menuScale
+             local textY = footerY_px + (footerH_px - fFontSize)/2
+             
+             -- Left: putin ac on the flop
+             Susano.DrawText(leftX_px + (5 * _G.menuScale), textY, "putin ac on the flop", fFontSize, 0.7, 0.7, 0.7, 1)
 
-    if currentMenu == "ONLINE" then
-        SetTextFont(4)
-        SetTextScale(0.28, 0.28)
-        SetTextColour(180, 180, 180, a)
-        SetTextCentre(true)
-        BeginTextCommandDisplayText("STRING")
-        AddTextComponentSubstringPlayerName(onlineFilterVehicles and "~g~Filter: Vehicles Only (E)" or "~w~Filter: All Players (E)")
-        EndTextCommandDisplayText(baseX, listTopY + listHeight + 0.035)
+             
+             -- Right: 1 / X
+             if Susano.GetTextWidth then
+                 local countW = Susano.GetTextWidth(footerText, fFontSize)
+                 Susano.DrawText(leftX_px + menuW_px - countW - (5 * _G.menuScale), textY, footerText, fFontSize, 0.7, 0.7, 0.7, 1)
+             else
+                 Susano.DrawText(leftX_px + menuW_px - (40 * _G.menuScale), textY, footerText, fFontSize, 0.7, 0.7, 0.7, 1)
+             end
+        else
+            -- Native Fallback
+             local footerY = listTopY + listHeight + 0.012
+            SetTextFont(4)
+            BeginTextCommandDisplayText("STRING")
+            AddTextComponentSubstringPlayerName(footerText)
+            EndTextCommandDisplayText(baseX, footerY)
+        end
+    end
+end
+
+local function HandleMenuScroll(dir)
+    -- Debounce
+    local currentTime = GetGameTimer()
+    if currentTime - lastNavTime < 150 then return end -- Faster debounce for scroll
+    lastNavTime = currentTime
+
+    if currentMenu == "SETTINGS" then
+        if selectedOption == 1 then
+             _G.menuScale = _G.menuScale + (0.05 * dir)
+             if _G.menuScale < 0.5 then _G.menuScale = 0.5 end
+        end
+    elseif currentMenu == "MISC" and selectedOption == 3 then
+        -- Freecam Speed
+        local speeds = {0.1, 0.5, 1.0, 2.0, 5.0}
+        local current = _G.freecam_speed or 0.5
+        local idx = 3
+        for i, s in ipairs(speeds) do
+            if s == current then idx = i break end
+        end
+        idx = idx + dir
+        if idx < 1 then idx = #speeds elseif idx > #speeds then idx = 1 end
+        _G.freecam_speed = speeds[idx]
+        -- ShowDynastyNotification("Speed: " .. _G.freecam_speed) -- Optional feedback
+    elseif currentMenu == "PLAYER" and selectedOption == 4 then
+        -- Noclip Speed
+         local speeds = {0.1, 0.5, 1.0, 2.0, 5.0, 10.0}
+         local current = noclipSpeed
+         local idx = 3
+         for i, s in ipairs(speeds) do
+             if s == current then idx = i break end
+         end
+         idx = idx + dir
+         if idx < 1 then idx = #speeds elseif idx > #speeds then idx = 1 end
+         noclipSpeed = speeds[idx]
+         ShowDynastyNotification("Noclip Speed: " .. noclipSpeed)
     end
 end
 
@@ -3071,11 +3556,15 @@ local function HandleMenuSelection()
         elseif choice == "Combat" then
             currentMenu = "COMBAT"
             selectedOption, startIndex = 1, 1
+            menuLastSwitchTime = GetGameTimer()
         elseif choice == "Vehicle" then
             currentMenu = "VEHICLE"
             selectedOption, startIndex = 1, 1
         elseif choice == "Miscellaneous" then
             currentMenu = "MISC"
+            selectedOption, startIndex = 1, 1
+        elseif choice == "Settings" then
+            currentMenu = "SETTINGS"
             selectedOption, startIndex = 1, 1
         end
 
@@ -3097,6 +3586,8 @@ local function HandleMenuSelection()
             ShowDynastyNotification("~g~Unfreeze done!")
         elseif selectedOption == 6 then
             ToggleAntiHeadshot(not antiHeadshotActive)
+        elseif selectedOption == 7 then
+            ToggleStaffMode()
         end
 
     elseif currentMenu == "COMBAT" then
@@ -3111,26 +3602,33 @@ local function HandleMenuSelection()
             FixVehicle()
         elseif selectedOption == 2 then
             MaxUpgradeVehicle()
-        elseif selectedOption == 3 then
-            KickVehicle()
-        elseif selectedOption == 4 then
-            BugVehicle()
-        elseif selectedOption == 5 then
-            ToggleThrowVehicle()
-        elseif selectedOption == 6 then
-            ToggleRampVehicle()
-        elseif selectedOption == 7 then
-            ToggleCarryVehicle()
-        elseif selectedOption == 8 then
-            ToggleEasyHandling()
         elseif selectedOption == 9 then
-            ToggleForceVehicleEngine(not forceEngineActive)
-        elseif selectedOption == 10 then
             ToggleShiftBoost(not shiftBoostActive)
+        elseif selectedOption == 10 then
+            ToggleFOVWarp()
+        elseif selectedOption == 3 then
+            BugVehicle()
+        elseif selectedOption == 4 then
+            ToggleRampVehicle()
+        elseif selectedOption == 5 then
+            ToggleEasyHandling()
+        elseif selectedOption == 6 then
+            ToggleForceVehicleEngine(not forceEngineActive)
+        elseif selectedOption == 7 then
+            ToggleShiftBoost(not shiftBoostActive)
+        elseif selectedOption == 8 then
+            ToggleFOVWarp()
+        end
+
+    elseif currentMenu == "SETTINGS" then
+        if selectedOption == 2 then
+            _G.headerImgScaleW = 1.0
+            _G.headerImgScaleH = 1.0
+            _G.menuScale = 1.0
         end
 
     elseif currentMenu == "ONLINE" then
-        local list = GetDisplayedPlayerList()
+        local list = GetCachedPlayerList()
         selectedPlayer = list[selectedOption]
         currentMenu = "TROLL"
         selectedOption, startIndex = 1, 1
@@ -3158,13 +3656,9 @@ local function HandleMenuSelection()
         elseif selectedOption == 6 then
             ToggleSpectate(not spectateActive)
         elseif selectedOption == 7 then
-            KickVehicle()
-        elseif selectedOption == 8 then
             BugVehicle()
-        elseif selectedOption == 9 then
+        elseif selectedOption == 8 then
             TeleportToPlayer()
-        elseif selectedOption == 10 then
-            HijackTargetVehicle()
         end
     end
 end
@@ -3186,7 +3680,7 @@ local function HandleNavigationUp()
 
     local list = mainOptions
     if currentMenu == "PLAYER" then list = playerOptions
-    elseif currentMenu == "ONLINE" then list = GetDisplayedPlayerList()
+    elseif currentMenu == "ONLINE" then list = GetCachedPlayerList()
     elseif currentMenu == "COMBAT" then list = combatOptions
     elseif currentMenu == "VEHICLE" then list = vehicleOptions
     elseif currentMenu == "MISC" then list = miscOptions
@@ -3205,7 +3699,7 @@ local function HandleNavigationDown()
 
     local list = mainOptions
     if currentMenu == "PLAYER" then list = playerOptions
-    elseif currentMenu == "ONLINE" then list = GetDisplayedPlayerList()
+    elseif currentMenu == "ONLINE" then list = GetCachedPlayerList()
     elseif currentMenu == "COMBAT" then list = combatOptions
     elseif currentMenu == "VEHICLE" then list = vehicleOptions
     elseif currentMenu == "MISC" then list = miscOptions
@@ -3235,7 +3729,7 @@ CreateThread(function()
             end
         end
 
-        DrawDynastyNotify()
+        -- DrawDynastyNotify() -- Moved to RenderThread for Susano support
 
         if menuOpen then
             if IsControlPressed(0, KEY_UP) then
@@ -3250,7 +3744,26 @@ CreateThread(function()
                 HandleBackNavigation()
             end
 
-            if IsControlJustPressed(0, KEY_SELECT) then
+            if IsControlPressed(0, KEY_LEFT) then
+                HandleMenuScroll(-1)
+            end
+            if IsControlPressed(0, KEY_RIGHT) then
+                HandleMenuScroll(1)
+            end
+
+            local shouldSelect = false
+            if currentMenu == "COMBAT" and selectedOption == 1 then
+                if IsControlPressed(0, KEY_SELECT) then
+                    if (GetGameTimer() - menuLastSwitchTime) > 500 then
+                        shouldSelect = true
+                        Wait(50)
+                    end
+                end
+            elseif IsControlJustPressed(0, KEY_SELECT) then
+                shouldSelect = true
+            end
+
+            if shouldSelect then
                 HandleMenuSelection()
             elseif currentMenu == "ONLINE" and IsControlJustPressed(0, KEY_CARRY) then
                 onlineFilterVehicles = not onlineFilterVehicles
@@ -3298,7 +3811,26 @@ end)
 CreateThread(function()
     while true do
         Wait(0)
-        RenderMenu()
+        local useSusano = (Susano and Susano.BeginFrame and Susano.SubmitFrame)
+        if useSusano then 
+            Susano.BeginFrame()
+            if _G.menuFontId and Susano.PushFont then
+                Susano.PushFont(_G.menuFontId)
+            end
+        end
+        
+        local success, err = pcall(RenderMenu)
+        if not success then
+            -- Silent fail to prevent crash
+        end
+        DrawDynastyNotify() -- Draw Notifications in Susano Frame
+        
+        if useSusano then 
+            if _G.menuFontId and Susano.PopFont then
+                Susano.PopFont()
+            end
+            Susano.SubmitFrame() 
+        end
     end
 end)
 
@@ -3361,3 +3893,4 @@ CreateThread(function()
         end
     end
 end)
+
