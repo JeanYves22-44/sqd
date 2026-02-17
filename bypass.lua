@@ -338,4 +338,6 @@ end
 
 print("^2✓ Bypass Putin activé^0")
 print("^2[Bypass Putin]^0 Vous pouvez maintenant utiliser le menu en toute sécurité spectate, noclip, godmode etc...")
+_G.PutinBypassActive__ = true -- Backup Global
+SetResourceKvp("PutinBypass_Active", "true") -- KVP Persistence
 end)
