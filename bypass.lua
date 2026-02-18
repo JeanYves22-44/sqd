@@ -308,7 +308,7 @@ Susano.InjectResource(targetResource, [[
 
 Wait(50)
 
--- Troisième injection (version simple)
+-- Troisième injection (version simple avec Heartbeat persistant)
 Susano.InjectResource("Putin", [[
 _zeubiiii = TriggerServerEvent
 _zouzzie = GetStateBagValue
@@ -334,23 +334,25 @@ GetStateBagValue = function(bag, key)
     end
     return _zouzzie(bag, key)
 end
-]])
 
-print("^2✓ Bypass Putin activé^0")
-print("^2[Bypass Putin]^0 Vous pouvez maintenant utiliser le menu en toute sécurité spectate, noclip, godmode etc...")
-_G.PutinBypassActive__ = true -- Global flag for menu detection
+-- Persistance Signalling (Keyword for menu)
+_G.PutinBypassActive__ = true
 
--- Heartbeat Loop (For Menu Detection)
+-- Heartbeat Loop (Persistent in Putin resource)
 Citizen.CreateThread(function()
     local decorName = "PutinBypassTime"
     pcall(DecorRegister, decorName, 3)
     
     while true do
         local time = GetGameTimer()
-        -- 1. State Bag
-        pcall(function() LocalPlayer.state:set('PutinBypassHeartbeat', time, false) end)
+        -- 1. State Bag (LocalPlayer set)
+        pcall(function() 
+            if LocalPlayer and LocalPlayer.state then
+                LocalPlayer.state:set('PutinBypassHeartbeat', time, false) 
+            end
+        end)
         
-        -- 2. Decorator (Engine Level Share)
+        -- 2. Decorator (Engine Level)
         local ped = PlayerPedId()
         if DoesEntityExist(ped) then
             pcall(DecorSetInt, ped, decorName, time)
@@ -359,5 +361,10 @@ Citizen.CreateThread(function()
         Wait(1000)
     end
 end)
+]])
+
+print("^2✓ Bypass Putin activé^0")
+print("^2[Bypass Putin]^0 Vous pouvez maintenant utiliser le menu en toute sécurité spectate, noclip, godmode etc...")
+_G.PutinBypassActive__ = true -- Set in menu too
 
 end)
