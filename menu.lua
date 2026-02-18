@@ -1,4 +1,4 @@
-local menuOpen = false
+  local menuOpen = false
 local bypassLoaded = false
 local lastHeartbeatCheck = 0
 
@@ -77,10 +77,20 @@ local freeCamTpOnExit = false
 local throwVehicleActive = false
 local onlineFilterVehicles = false
 local soloSessionActive = false
+local shootVisionActive = false
+local shootVisionTarget = nil
 
 local lastNavTime = 0
+local noclipBindKey = 289 -- Default: F2
 local normalNavDelay = 200
 local fastNavDelay = 120
+
+-- Binding UI State
+local isBindingNoclip = false
+local bindingActionData = nil
+local bindingText = ""
+local bindingKeyDisplay = ""
+_G.UniversalKeyBinds = {} 
 
 -- Settings Globals
 _G.headerImgScaleW = 1.0
@@ -96,6 +106,105 @@ local KEY_REVIVE = 73
 local KEY_CARRY = 51
 local KEY_LEFT = 174
 local KEY_RIGHT = 175
+
+-- Comprehensive Control Names Map for UI Display (AZERTY FR Optimized)
+_G.ControlNamesMap = {
+    -- Navigation & Camera
+    [0] = "NEXT CAMERA", [1] = "LOOK L/R", [2] = "LOOK U/D", [3] = "LOOK U/D", [4] = "LOOK L/R",
+    [5] = "LOOK BEHIND", [6] = "SCROLL DOWN", [7] = "SCROLL UP", [8] = "LOOK UP", [9] = "LOOK DOWN", 
+    [10] = "LOOK LEFT", [11] = "LOOK RIGHT", [12] = "SCROLL UP", [13] = "SCROLL DOWN",
+    [14] = "SCROLL UP", [15] = "SCROLL DOWN", [16] = "SCROLL UP", [17] = "SCROLL DOWN",
+    
+    -- Main Actions
+    [18] = "R", [19] = "ALT", [20] = "W", [21] = "L-SHIFT", [22] = "SPACE", [23] = "F",
+    [24] = "MOUSE LEFT", [25] = "MOUSE RIGHT", [26] = "C", [27] = "F1", [28] = "F2", [29] = "F3",
+    
+    -- Movement (ZQSD for AZERTY)
+    [30] = "D", [31] = "S", [32] = "Z", [33] = "S", [34] = "Q", [35] = "D",
+    [36] = "L-CTRL", [37] = "TAB", [38] = "E", [39] = "C", [40] = "CAPSLOCK", 
+    [41] = "L-ALT", [42] = "R-ALT", [43] = "SCROLL UP",
+    
+    -- Action Keys
+    [44] = "A", [45] = "R", [46] = "T", [47] = "G", [48] = "Y", [49] = "U",
+    [50] = "I", [51] = "E", [52] = "A", [53] = "~", [54] = "Q", [55] = "S",
+    
+    -- Function Keys
+    [56] = "F9", [57] = "F10", [58] = "F1", [59] = "F2", [60] = "F3", [61] = "F5",
+    [62] = "F6", [63] = "F7", [64] = "F8", [65] = "F9", [66] = "F10", [67] = "F11",
+    [68] = "F12", [69] = "F4", [70] = "F",
+    
+    -- Vehicle Controls (ZQSD for AZERTY)
+    [71] = "Z", [72] = "S", [73] = "X", [74] = "H", [75] = "F", [76] = "SPACE",
+    [77] = "D", [78] = "Q", [79] = "Z", [80] = "R", [81] = ".", [82] = ",", 
+    [83] = "=", [84] = "-", [85] = "A", [86] = "E", [87] = "PAGEUP", [88] = "PAGEDOWN",
+    [89] = "A", [90] = "E",
+    
+    -- Arrow Keys
+    [91] = "LEFT", [92] = "RIGHT", [93] = "UP", [94] = "DOWN", [95] = "ENTER",
+    [96] = "LEFT", [97] = "RIGHT", [98] = "UP", [99] = "DOWN",
+    
+    -- System Controls
+    [100] = "L-SHIFT", [101] = "L-CTRL", [102] = "L-ALT", [103] = "R-SHIFT",
+    [104] = "R-CTRL", [105] = "R-ALT", [106] = "SCROLL UP", [107] = "SCROLL DOWN",
+    [108] = "MOUSE LEFT", [109] = "MOUSE RIGHT", [110] = "MOUSE MIDDLE",
+    
+    -- More Actions
+    [140] = "R", [141] = "A", [142] = "MOUSE LEFT", [143] = "Z", 
+    [157] = "1", [158] = "2", [159] = "3", [160] = "4", [161] = "5", 
+    [162] = "6", [163] = "7", [164] = "8", [165] = "9", 
+    [166] = "F5", [167] = "F6", [168] = "F7", [169] = "F8", [170] = "F3",
+    
+    -- Menu Navigation & Special
+    [171] = "CAPSLOCK", [172] = "HAUT", [173] = "BAS", [174] = "GAUCHE", [175] = "DROITE",
+    [176] = "ENTER", [177] = "BACKSPACE", [178] = "DELETE", [179] = "HOME",
+    [180] = "PAGEUP", [181] = "PAGEDOWN", [182] = "L-CTRL",
+    [183] = "G", [184] = "E", [185] = "F", [186] = "V",
+    [187] = "UP", [188] = "DOWN", [189] = "LEFT", [190] = "RIGHT",
+    [191] = "ENTER", [192] = "TAB", [193] = "MOUSE LEFT", [194] = "BACKSPACE",
+    [195] = "X", [196] = "ESC", [200] = "ESC", [201] = "ENTER", [202] = "BACKSPACE",
+    [203] = "SPACE", [204] = "TAB", [205] = "ENTER", [206] = "BACKSPACE",
+    
+    -- Sub-Actions (ZQSD for AZERTY)
+    [232] = "Z", [233] = "Z", [234] = "S", [235] = "Q", [236] = "D", [237] = "V",
+    [238] = "MOUSE LEFT", [239] = "MOUSE RIGHT",
+    
+    -- Mouse Wheel & Multi-Input
+    [240] = "SCROLL UP", [241] = "SCROLL UP", [242] = "SCROLL DOWN",
+    [243] = "²", [244] = "M", [245] = "T", [246] = "Y", [247] = "U",
+    [248] = "I", [249] = "N", [250] = "B", [251] = "H", [252] = "G",
+    [253] = "J", [254] = "K", [255] = "L", [256] = "M",
+    [257] = "MOUSE LEFT", [261] = "SCROLL UP", [262] = "SCROLL DOWN",
+    [263] = "MOUSE LEFT", [264] = "MOUSE RIGHT", [265] = "MOUSE MIDDLE",
+    
+    -- Extended Actions
+    [301] = "M", [302] = "B", [303] = "U", [304] = "P", [305] = "K",
+    [306] = "L", [307] = "H", [308] = "N", [309] = "J", [310] = "O", [311] = "K",
+    [312] = "I", [313] = "O", [314] = "P",
+    
+    -- Extended
+    [266] = "SPACE", [267] = "ENTER", [268] = "BACKSPACE", 
+    [274] = "LEFT", [275] = "RIGHT", [276] = "UP", [277] = "DOWN",
+    
+    -- Numpad
+    [278] = "NUM +", [279] = "NUM -", [282] = "NUM ENTER", [284] = "NUM 0", [285] = "NUM 1",
+    [334] = "NUM 6", [335] = "NUM 7", [336] = "NUM 8", [337] = "NUM 9",
+    [338] = "NUM 4", [339] = "NUM 5", [340] = "NUM 1", [341] = "NUM 2",
+    [342] = "NUM 3", [343] = "NUM ENTER",
+    
+    -- Final Keys
+    [288] = "F1", [289] = "F2", [290] = "F3", [291] = "F5", [292] = "F6",
+    [293] = "F7", [294] = "F8", [295] = "F9", [296] = "F10", [297] = "F11",
+    [298] = "F12", [300] = "ESC", [344] = "F11", [345] = "ENTER", 
+    [346] = "RETOUR", [347] = "SPACE",
+    [348] = "MOUSE LEFT", [349] = "MOUSE RIGHT", [350] = "MOUSE MIDDLE",
+    -- Letters (AZERTY Full)
+    [244] = "M", [246] = "Y", [247] = "U", [248] = "I", [249] = "N",
+    [250] = "B", [251] = "H", [252] = "G", [253] = "J", [254] = "K",
+    [255] = "L", [256] = "M", [301] = "M", [302] = "B", [303] = "U",
+    [304] = "P", [305] = "K", [306] = "L", [307] = "H", [308] = "N",
+    [309] = "J", [310] = "O", [311] = "K", [312] = "I", [313] = "O", [314] = "P"
+}
+
 local AK_DIST = 1.0
 
 local mainOptions = {
@@ -128,7 +237,8 @@ local antiHeadshotActive = false
 
 local combatOptions = {
     "Give All Weapons",
-    "Remove All Weapons"
+    "Remove All Weapons",
+    "Shoot Vision"
 }
 
 
@@ -142,6 +252,89 @@ local vehicleOptions = {
     "Shift Boost",
     "FOV Warp"
 }
+
+-- Shoot Vision Weapon Data
+local shootVisionWeapons = {
+    "WEAPON_PISTOL", "WEAPON_COMBATPISTOL", "WEAPON_APPISTOL", "WEAPON_PISTOL50",
+    "WEAPON_SNSPISTOL", "WEAPON_HEAVYPISTOL", "WEAPON_VINTAGEPISTOL", "WEAPON_MARKSMANPISTOL",
+    "WEAPON_REVOLVER", "WEAPON_DOUBLEACTION", "WEAPON_NAVYREVOLVER", "WEAPON_GADGETPISTOL",
+    "WEAPON_STUNGUN", "WEAPON_FLAREGUN", "WEAPON_CERAMICPISTOL", "WEAPON_PISTOLXM3",
+    "WEAPON_MICROSMG", "WEAPON_SMG", "WEAPON_ASSAULTSMG", "WEAPON_COMBATPDW",
+    "WEAPON_MACHINEPISTOL", "WEAPON_MINISMG", "WEAPON_TECPISTOL",
+    "WEAPON_ASSAULTRIFLE", "WEAPON_CARBINERIFLE", "WEAPON_ADVANCEDRIFLE", 
+    "WEAPON_SPECIALCARBINE", "WEAPON_BULLPUPRIFLE", "WEAPON_COMPACTRIFLE",
+    "WEAPON_MILITARYRIFLE", "WEAPON_HEAVYRIFLE", "WEAPON_TACTICALRIFLE",
+    "WEAPON_ASSAULTRIFLE_MK2", "WEAPON_CARBINERIFLE_MK2", "WEAPON_SPECIALCARBINE_MK2",
+    "WEAPON_BULLPUPRIFLE_MK2",
+    "WEAPON_SNIPERRIFLE", "WEAPON_HEAVYSNIPER", "WEAPON_MARKSMANRIFLE",
+    "WEAPON_HEAVYSNIPER_MK2", "WEAPON_MARKSMANRIFLE_MK2", "WEAPON_PRECISIONRIFLE",
+    "WEAPON_PUMPSHOTGUN", "WEAPON_SAWNOFFSHOTGUN", "WEAPON_ASSAULTSHOTGUN",
+    "WEAPON_BULLPUPSHOTGUN", "WEAPON_HEAVYSHOTGUN", "WEAPON_DBSHOTGUN",
+    "WEAPON_AUTOSHOTGUN", "WEAPON_COMBATSHOTGUN", "WEAPON_PUMPSHOTGUN_MK2",
+    "WEAPON_MG", "WEAPON_COMBATMG", "WEAPON_GUSENBERG", "WEAPON_COMBATMG_MK2",
+    "WEAPON_RPG", "WEAPON_GRENADELAUNCHER", "WEAPON_MINIGUN", "WEAPON_FIREWORK",
+    "WEAPON_RAILGUN", "WEAPON_HOMINGLAUNCHER", "WEAPON_COMPACTLAUNCHER",
+    "WEAPON_RAYMINIGUN", "WEAPON_EMPLAUNCHER", "WEAPON_RAILGUNXM3"
+}
+local weaponHashes = {}
+for _, w in ipairs(shootVisionWeapons) do weaponHashes[#weaponHashes+1] = GetHashKey(w) end
+
+function GetAnyAvailableWeapon(ped)
+    local equipped = GetSelectedPedWeapon(ped)
+    if equipped ~= GetHashKey("WEAPON_UNARMED") then return equipped end
+    
+    if moddedWeapons then
+        for _, w in ipairs(moddedWeapons) do
+            local hash = GetHashKey(w.name)
+            if HasPedGotWeapon(ped, hash, false) then return hash end
+        end
+    end
+    
+    for _, hash in ipairs(weaponHashes) do
+        if HasPedGotWeapon(ped, hash, false) then return hash end
+    end
+    return nil
+end
+
+-- Shoot Vision Visuals (Integrated with Susano Render Loop)
+-- Note: Function consolidated at the bottom of the file for better organization.
+
+-- Binding UI (Integrated with Susano Render Loop)
+function RenderBindingUI()
+    if not isBindingNoclip then return end
+    if not Susano or not Susano.DrawRectFilled or not Susano.GetTextWidth then return end
+
+    local sw, sh = GetActiveScreenResolution()
+    local fontSize = 20
+    local padding = 20
+    
+    local title = bindingActionData and bindingActionData.label or "Noclip"
+    local text1 = bindingText .. " (" .. title .. ")"
+    local text2 = bindingKeyDisplay ~= "" and ("Touche: " .. bindingKeyDisplay) or ""
+    local text3 = "F11 Sauver | F-Keys Uniquement | ESC Annuler"
+    
+    local w1 = Susano.GetTextWidth(text1, fontSize)
+    local w2 = Susano.GetTextWidth(text2, fontSize + 4)
+    local w3 = Susano.GetTextWidth(text3, fontSize - 4)
+    
+    local uiW = math.max(w1, w2, w3) + padding * 2
+    local uiH = 110
+    
+    local x = (sw / 2) - (uiW / 2)
+    local y = sh - uiH - 80
+    
+    -- Background Glassmorphic
+    Susano.DrawRectFilled(x, y, uiW, uiH, 0, 0, 0, 0.85, 10)
+    -- Accent Line (Purple)
+    Susano.DrawRectFilled(x, y + uiH - 4, uiW, 4, 0.58, 0.0, 0.82, 1.0, 0)
+    
+    -- Draw Texts
+    Susano.DrawText(x + (uiW - w1)/2, y + 15, text1, fontSize, 1, 1, 1, 1)
+    if text2 ~= "" then
+        Susano.DrawText(x + (uiW - w2)/2, y + 40, text2, fontSize + 4, 1, 1, 0, 1)
+    end
+    Susano.DrawText(x + (uiW - w3)/2, y + 75, text3, fontSize - 4, 0.7, 0.7, 0.7, 1)
+end
 
 local trollOptions = {
     "Launch V1 (Multi)",
@@ -162,6 +355,194 @@ local wardrobeOptions = {
     "Load Saved Outfit"
 }
 
+-- Community Outfits Data
+local CommunityOutfits = {
+    {
+        name = "Alkaida",
+        components = {
+            {1, 115, 6}, -- Mask
+            {3, 14, 0},  -- Arms
+            {4, 119, 4}, -- Pants
+            {6, 34, 0},  -- Shoes
+            {8, 15, 0},  -- Tshirt
+            {9, 11, 1},  -- Vest/Bproof
+            {11, 310, 4} -- Torso
+        },
+        props = {
+            {0, -1, 0}, -- Helmet (Clear)
+            {1, 0, 0}   -- Glasses (Clear)
+        }
+    },
+    {
+        name = "J-Y",
+        components = {
+            {1, 256, 0}, -- Mask
+            {3, 78, 0},  -- Arms
+            {4, 16, 3},  -- Pants
+            {5, 152, 0}, -- Bags (Parachute/Bag slot)
+            {6, 208, 5}, -- Shoes
+            {7, 180, 0}, -- Chain (Accessory)
+            {8, 15, 0},  -- Tshirt
+            {9, 0, 0},   -- Vest
+            {11, 924, 0} -- Torso
+        },
+        props = {
+            {0, 244, 0}, -- Helmet
+            {1, 71, 0}   -- Glasses
+        }
+    },
+    {
+        name = "Ombre du rif",
+        components = {
+            {1, 0, 0},   -- Mask
+            {2, 20, 0},  -- Hair (New)
+            {3, 30, 0},  -- Arms
+            {4, 142, 17}, -- Pants
+            {6, 250, 0}, -- Shoes
+            {8, 15, 0},  -- Tshirt
+            {9, 0, 0},   -- Bproof
+            {11, 0, 2}   -- Torso (variation 2)
+        },
+        props = {
+            {0, -1, 0}   -- Helmet (Clear)
+        }
+    }
+}
+local selectedOutfitIndex = 1
+
+local function LoadOutfit(data)
+    local ped = PlayerPedId()
+    
+    if data.components then
+        for _, comp in ipairs(data.components) do
+            SetPedComponentVariation(ped, comp[1], comp[2], comp[3], 0)
+        end
+    end
+    
+    if data.props then
+        for _, prop in ipairs(data.props) do
+            if prop[2] == -1 then
+                ClearPedProp(ped, prop[1])
+            else
+                SetPedPropIndex(ped, prop[1], prop[2], prop[3], true)
+            end
+        end
+    end
+    
+    ShowDynastyNotification("Outfit Loaded: ~b~" .. data.name)
+
+end
+
+local function RandomOutfit()
+    local ped = PlayerPedId()
+    ClearAllPedProps(ped)
+
+    -- 1. Randomize Hair & Colors
+    local hairCount = GetNumberOfPedDrawableVariations(ped, 2)
+    SetPedComponentVariation(ped, 2, math.random(0, math.max(0, hairCount-1)), 0, 0) -- Hair
+    
+    local hairColor = math.random(0, 63)
+    local highlightColor = math.random(0, 63)
+    SetPedHairColor(ped, hairColor, highlightColor)
+
+    -- 2. Sync Beard & Eyebrows to Hair Color
+    -- Beard (1)
+    SetPedHeadOverlay(ped, 1, math.random(0, GetNumHeadOverlayValues(1)-1), 1.0) 
+    SetPedHeadOverlayColor(ped, 1, 1, hairColor, highlightColor)
+    -- Eyebrows (2)
+    SetPedHeadOverlay(ped, 2, math.random(0, GetNumHeadOverlayValues(2)-1), 1.0)
+    SetPedHeadOverlayColor(ped, 2, 1, hairColor, highlightColor)
+
+    -- Expanded Style Data with Texture Support
+    local masks = {
+        {115, 6}, {256, 0}, {0, 0}, {0, 0}, {0, 0}
+    }
+    
+    -- Safe Upper Body Combinations (Fixed Geometry, Random Texture where possible)
+    -- Format: {Torso, Txt, Tshirt, Txt, Arms, Txt, Vest, Txt, Bag, Txt, Chain, Txt}
+    local tops = {
+        -- Alkaida (Tactical) - Fixed
+        {310, 4, 15, 0, 14, 0, 11, 1, 0, 0, 0, 0},
+        -- J-Y (Custom) - Fixed
+        {924, 0, 15, 0, 78, 0, 0, 0, 152, 0, 180, 0},
+        -- Luxe Classy (Suit) - Allow Texture Var for Jacket(11) & Pants(4)
+        {32, -1, 31, 1, 4, 0, 0, 0, 0, 0, 22, 0}, 
+        -- Hood (Hoodie) - Allow Texture Var
+        {84, -1, 15, 0, 14, 0, 0, 0, 0, 0, 0, 0},
+        -- Casual Clean (T-Shirt) - Allow Texture Var
+        {4, -1, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        -- Street Dark (Arms 1) - Allow Texture Var
+        {111, -1, 15, 0, 1, 0, 0, 0, 0, 0, 0, 0},
+        -- Ombre du rif (New)
+        {0, 2, 15, 0, 30, 0, 0, 0, 0, 0, 0, 0}
+    }
+    
+    local pants = {
+        {119, 4}, -- Alkaida
+        {16, 3},  -- J-Y
+        {24, -1}, -- Luxe (Random Color)
+        {47, -1}, -- Hood (Random Color)
+        {1, -1},  -- Casual (Random Color)
+        {28, -1}, -- Street (Random Color)
+        {142, 0}  -- Ombre du rif (Pants)
+    }
+    
+    local shoes = {
+        {34, 0}, {208, 5}, {10, -1}, {6, -1}, {1, -1}, {250, 0}
+    }
+    
+    local props = {
+        {-1, 0, 0, 0}, {244, 0, 71, 0}, {-1, 0, 5, -1}, {-1, 0, 2, -1}
+    }
+
+    -- Random Selections
+    local m = masks[math.random(#masks)]
+    local t = tops[math.random(#tops)]
+    local p = pants[math.random(#pants)]
+    local s = shoes[math.random(#shoes)]
+    local pr = props[math.random(#props)]
+
+    -- Helper for Random Texture
+    local function getTex(compID, drawID, defaultTex)
+        if defaultTex == -1 then
+            local count = GetNumberOfPedTextureVariations(ped, compID, drawID)
+            return math.random(0, math.max(0, count-1))
+        end
+        return defaultTex
+    end
+
+    -- Apply Components
+    SetPedComponentVariation(ped, 1, m[1], m[2], 0)       -- Mask
+    
+    -- Upper Body Bundle
+    local t_tex = getTex(11, t[1], t[2]) -- Randomize Torso color if allowed
+    SetPedComponentVariation(ped, 11, t[1], t_tex, 0)     -- Torso
+    SetPedComponentVariation(ped, 8, t[3], t[4], 0)       -- Tshirt
+    SetPedComponentVariation(ped, 3, t[5], t[6], 0)       -- Arms
+    SetPedComponentVariation(ped, 9, t[7], t[8], 0)       -- Vest
+    SetPedComponentVariation(ped, 5, t[9], t[10], 0)      -- Bag
+    SetPedComponentVariation(ped, 7, t[11], t[12], 0)     -- Chain
+
+    -- Lower Body
+    local p_tex = getTex(4, p[1], p[2])
+    SetPedComponentVariation(ped, 4, p[1], p_tex, 0)      -- Pants
+    
+    local s_tex = getTex(6, s[1], s[2])
+    SetPedComponentVariation(ped, 6, s[1], s_tex, 0)      -- Shoes
+
+    -- Apply Props
+    if pr[1] ~= -1 then 
+        local pr_tex = getTex(0, pr[1], pr[2]) -- Actually prop texture logic differs, but keeping simple for now
+        SetPedPropIndex(ped, 0, pr[1], pr[2], true) 
+    else 
+        ClearPedProp(ped, 0) 
+    end
+    
+    if pr[3] ~= -1 then SetPedPropIndex(ped, 1, pr[3], pr[4], true) else ClearPedProp(ped, 1) end
+
+    ShowDynastyNotification("Random Style: ~b~Expanded + V2")
+end
+
 local function GetWardrobeOptions()
     local ped = PlayerPedId()
     local hat = GetPedPropIndex(ped, 0)
@@ -174,10 +555,8 @@ local function GetWardrobeOptions()
     
     -- Format: Name: -Value-
     return {
-        "Reset Outfit",
         "Random Outfit",
-        "Load Saved Outfit",
-        "Save Current Outfit",
+        "Community Outfit: < " .. CommunityOutfits[selectedOutfitIndex].name .. " >",
         "________ Clothing ________",
         "Hat: " .. hat,
         "Mask: " .. mask,
@@ -195,10 +574,7 @@ local function GetMiscOptions()
         "Bypass Status: " .. status,
         "Check Bypass",
         "Freecam",
-        "Freecam Speed: " .. tostring(_G.freecam_speed or 0.5),
-        "Spectate",
-        "Bug Vehicle",
-        "Teleport To Player"
+        "Freecam Speed: " .. tostring(_G.freecam_speed or 0.5)
     }
 end
 
@@ -1181,12 +1557,6 @@ local function ToggleFullGodmode(enable)
                 return true
             end)
 
-            susano.HookNative(0x697157CED63F18D4, function(ped, damage, armorDamage)
-                if _G.FullGodmodeEnabled and ped == PlayerPedId() then
-                    return false
-                end
-                return true
-            end)
 
             susano.HookNative(0x6B76DC1F3AE6E6A3, function(entity, health)
                 if _G.FullGodmodeEnabled and entity == PlayerPedId() then
@@ -1198,12 +1568,7 @@ local function ToggleFullGodmode(enable)
                 return true
             end)
 
-            susano.HookNative(0x7C6BCA42, function(ped)
-                if _G.FullGodmodeEnabled and ped == PlayerPedId() then
-                    return false
-                end
-                return true
-            end)
+
         end
 
         if not _G.FullGodmodeLoopStarted then
@@ -1261,12 +1626,6 @@ local function ToggleSemiGodmode(enable)
                 return true
             end)
 
-            susano.HookNative(0x697157CED63F18D4, function(ped, damage, armorDamage)
-                if _G.SemiGodmodeEnabled and ped == PlayerPedId() then
-                    return false
-                end
-                return true
-            end)
 
             susano.HookNative(0x6B76DC1F3AE6E6A3, function(entity, health)
                 if _G.SemiGodmodeEnabled and entity == PlayerPedId() then
@@ -1278,12 +1637,7 @@ local function ToggleSemiGodmode(enable)
                 return true
             end)
 
-            susano.HookNative(0x7C6BCA42, function(ped)
-                if _G.SemiGodmodeEnabled and ped == PlayerPedId() then
-                    return false
-                end
-                return true
-            end)
+
         end
 
         if not _G.SemiGodmodeLoopStarted then
@@ -1403,7 +1757,7 @@ local freecam_speed = 0.5
 local normal_speed = 0.5
 local fast_speed = 2.5
 
-local FreecamOptions = { "Launch", "Teleport" }
+local FreecamOptions = { "Launch", "Teleport", "Shoot Vision" }
 local FreecamSelectedOption = 1
 local lastScrollTime = 0
 local lastScrollValue = 0.0
@@ -1678,14 +2032,37 @@ function HandleInputMenu()
     end
     if math.abs(scrollValue) < 0.05 then lastScrollValue = scrollValue end
 
-    local click_pressed = IsDisabledControlJustPressed(0, 24)
-    if click_pressed and not freecam_just_started and (currentTime - last_click_time) > 200 then
+    -- Use both Enter and Left-click for context-sensitive validation
+    -- Checking both disabled and enabled states for control 24 (Left-click) for absolute reliability.
+    local enter_pressed = IsDisabledControlJustPressed(0, 191) or IsDisabledControlJustPressed(0, 201)
+    local click_pressed = IsDisabledControlJustPressed(0, 24) or IsControlJustPressed(0, 24)
+    local validated = enter_pressed or click_pressed
+
+    if validated and not freecam_just_started and (currentTime - last_click_time) > 150 then
         last_click_time = currentTime
         local name = FreecamOptions[FreecamSelectedOption]
         if name == "Launch" then
+            shootVisionActive = false 
+            ShowDynastyNotification("~b~Launching Target...")
             FreecamLaunchPlayer()
         elseif name == "Teleport" then
+            shootVisionActive = false
             TeleportToFreecam()
+        elseif name == "Shoot Vision" then
+            if enter_pressed then
+                shootVisionActive = not shootVisionActive
+                ShowDynastyNotification("Shoot Vision: " .. (shootVisionActive and "~g~ON" or "~r~OFF"))
+            elseif click_pressed and not shootVisionActive then
+                shootVisionActive = true
+                ShowDynastyNotification("Shoot Vision: ~g~ON")
+            end
+            
+            if shootVisionActive then
+                local ped = PlayerPedId()
+                if not GetAnyAvailableWeapon(ped) then
+                    ShowDynastyNotification("~y~Aucune arme trouvée dans l'inventaire")
+                end
+            end
         end
     end
 end
@@ -1732,6 +2109,12 @@ function UpdateFreecam()
         if Susano.GetAsyncKeyState(VK_Q) then sideways = -1.0 end
         if Susano.GetAsyncKeyState(VK_SPACE) then vertical = 1.0 end
         if Susano.GetAsyncKeyState(VK_CONTROL) then vertical = -1.0 end
+
+        -- Mouse Wheel Elevation
+        local scrollDelta = GetDisabledControlNormal(0, 14)
+        if math.abs(scrollDelta) > 0.01 then
+            vertical = vertical + (scrollDelta * 5.0) -- Multiply for responsiveness
+        end
 
         local speed = normal_speed
         if Susano.GetAsyncKeyState(VK_SHIFT) then
@@ -1844,7 +2227,7 @@ local function ToggleNoclip()
     
     if noclipActive then
         Citizen.CreateThread(function()
-            local currentSpeed = noclipSpeed
+            local currentSpeed = noclipSpeed or 1.0
             while noclipActive do
                 local ped = PlayerPedId()
                 local veh = GetVehiclePedIsIn(ped, false)
@@ -3673,6 +4056,8 @@ local function RenderMenu()
                 label = "Anti Freeze " .. (antiFreezeActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "PLAYER" and index == 8 then
                 label = "Staff Mode " .. (staffModeActive and "~g~[ON]" or "~r~[OFF]")
+            elseif currentMenu == "COMBAT" and index == 3 then
+                label = "Shoot Vision " .. (shootVisionActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "MISC" and index == 1 then
                 label = "Bypass Status: " .. (bypassLoaded and "~g~[ACTIVE]" or "~r~[INACTIVE]")
             elseif currentMenu == "MISC" and index == 2 then
@@ -3719,6 +4104,13 @@ local function RenderMenu()
                 -- Remove color codes for Susano (basic strip)
                 local cleanLabel = label:gsub("~[a-z]~", "")
                 
+                if cleanLabel:find("Clothing") and Susano and type(Susano.GetTextWidth) == "function" then
+                     local success, txtW = pcall(Susano.GetTextWidth, cleanLabel, fontSize)
+                     if success and txtW then
+                        textX = leftX_px + (menuW_px - txtW)/2
+                     end
+                end
+
                 Susano.DrawText(textX, textY, cleanLabel, fontSize, 0.94, 0.94, 0.92, 1)
                 
                 if hasSubmenu then
@@ -3789,7 +4181,7 @@ local function HandleMenuScroll(dir)
     local isSlider = false
     if currentMenu == "PLAYER" and selectedOption == 5 then isSlider = true -- Noclip Speed
     elseif currentMenu == "MISC" and selectedOption == 4 then isSlider = true -- Freecam Speed
-    elseif currentMenu == "WARDROBE" and selectedOption >= 6 then isSlider = true -- Clothing Sliders
+    elseif currentMenu == "WARDROBE" and (selectedOption == 2 or selectedOption >= 4) then isSlider = true -- Clothing Sliders
     elseif currentMenu == "SETTINGS" then isSlider = true -- All Settings
     end
 
@@ -3816,61 +4208,74 @@ local function HandleMenuScroll(dir)
         elseif currentMenu == "WARDROBE" then
             -- Wardrobe Sliders
             local ped = PlayerPedId()
-            if selectedOption == 6 then -- Hat (Prop 0)
+            
+            if selectedOption == 2 then -- Community Outfits
+                selectedOutfitIndex = selectedOutfitIndex + dir
+                if selectedOutfitIndex > #CommunityOutfits then selectedOutfitIndex = 1 
+                elseif selectedOutfitIndex < 1 then selectedOutfitIndex = #CommunityOutfits end
+            
+            elseif selectedOption == 4 then -- Hat (Prop 0)
                  local current = GetPedPropIndex(ped, 0)
                  local count = GetNumberOfPedPropDrawableVariations(ped, 0)
                  local nextVal = (current + dir) % count
                  if nextVal < -1 then nextVal = count - 1 end
                  if nextVal == -1 then ClearPedProp(ped, 0) else SetPedPropIndex(ped, 0, nextVal, 0, true) end
-            elseif selectedOption == 7 then -- Mask (Comp 1)
+            elseif selectedOption == 5 then -- Mask (Comp 1)
                  local current = GetPedDrawableVariation(ped, 1)
                  local count = GetNumberOfPedDrawableVariations(ped, 1)
                  local nextVal = (current + dir) % count
                  SetPedComponentVariation(ped, 1, nextVal, 0, 0)
-            elseif selectedOption == 8 then -- Glasses (Prop 1)
+            elseif selectedOption == 6 then -- Glasses (Prop 1)
                  local current = GetPedPropIndex(ped, 1)
                  local count = GetNumberOfPedPropDrawableVariations(ped, 1)
                  local nextVal = (current + dir) % count
                  if nextVal == -1 then ClearPedProp(ped, 1) else SetPedPropIndex(ped, 1, nextVal, 0, true) end
-            elseif selectedOption == 9 then -- Torso (Comp 11)
+            elseif selectedOption == 7 then -- Torso (Comp 11)
                  local current = GetPedDrawableVariation(ped, 11)
                  local count = GetNumberOfPedDrawableVariations(ped, 11)
                  local nextVal = (current + dir) % count
                  SetPedComponentVariation(ped, 11, nextVal, 0, 0)
-            elseif selectedOption == 10 then -- Tshirt (Comp 8)
+            elseif selectedOption == 8 then -- Tshirt (Comp 8)
                  local current = GetPedDrawableVariation(ped, 8)
                  local count = GetNumberOfPedDrawableVariations(ped, 8)
                  local nextVal = (current + dir) % count
                  SetPedComponentVariation(ped, 8, nextVal, 0, 0)
-            elseif selectedOption == 11 then -- Pants (Comp 4)
+            elseif selectedOption == 9 then -- Pants (Comp 4)
                  local current = GetPedDrawableVariation(ped, 4)
                  local count = GetNumberOfPedDrawableVariations(ped, 4)
                  local nextVal = (current + dir) % count
                  SetPedComponentVariation(ped, 4, nextVal, 0, 0)
-            elseif selectedOption == 12 then -- Shoes (Comp 6)
+            elseif selectedOption == 10 then -- Shoes (Comp 6)
                  local current = GetPedDrawableVariation(ped, 6)
                  local count = GetNumberOfPedDrawableVariations(ped, 6)
                  local nextVal = (current + dir) % count
                  SetPedComponentVariation(ped, 6, nextVal, 0, 0)
             end
         end
-    elseif currentMenu == "PLAYER" or currentMenu == "WARDROBE" then
-        -- Player Tabs Logic (Left/Right switches tabs)
-        if currentMenu == "PLAYER" and dir > 0 then
-             currentMenu = "WARDROBE"
-             selectedOption, startIndex = 1, 1
-             PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
-        elseif currentMenu == "WARDROBE" and dir < 0 then
-             currentMenu = "PLAYER"
-             selectedOption, startIndex = 1, 1
-             PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
-        end
-    end
+
+end
 end
 
-local function HandleMenuSelection()
-    if currentMenu == "MAIN" then
-        local choice = mainOptions[selectedOption]
+function ExecuteMenuAction(menu, index, listOverride)
+    local menu = menu or currentMenu
+    local index = index or selectedOption
+    local fullList = listOverride
+    
+    if not fullList then
+        if menu == "MAIN" then fullList = mainOptions
+        elseif menu == "PLAYER" then fullList = GetPlayerOptions()
+        elseif menu == "ONLINE" then fullList = GetCachedPlayerList()
+        elseif menu == "COMBAT" then fullList = combatOptions
+        elseif menu == "VEHICLE" then fullList = vehicleOptions
+        elseif menu == "MISC" then fullList = GetMiscOptions()
+        elseif menu == "WARDROBE" then fullList = GetWardrobeOptions()
+        elseif menu == "SETTINGS" then fullList = GetSettingsOptions()
+        elseif menu == "TROLL" then fullList = trollOptions
+        end
+    end
+
+    if menu == "MAIN" then
+        local choice = mainOptions[index]
         if choice == "Player" then
             currentMenu = "PLAYER"
             selectedOption, startIndex = 1, 1
@@ -3895,8 +4300,8 @@ local function HandleMenuSelection()
             selectedOption, startIndex = 1, 1
         end
 
-    elseif currentMenu == "ONLINE" then
-        local target = GetCachedPlayerList()[selectedOption]
+    elseif menu == "ONLINE" then
+        local target = (listOverride or GetCachedPlayerList())[index]
         if target then
             selectedPlayer = target
             currentMenu = "TROLL"
@@ -3904,17 +4309,16 @@ local function HandleMenuSelection()
             ShowDynastyNotification("Selected: ~b~" .. target.name)
         end
 
-    elseif currentMenu == "PLAYER" then
-        if selectedOption == 1 then
+    elseif menu == "PLAYER" then
+        if index == 1 then
             ToggleFullGodmode(not fullGodModeActive)
-        elseif selectedOption == 2 then
+        elseif index == 2 then
             ToggleSemiGodmode(not semiGodModeActive)
-        elseif selectedOption == 3 then
+        elseif index == 3 then
             SoloSession()
-        elseif selectedOption == 4 then
+        elseif index == 4 then
             ToggleNoclip()
-        elseif selectedOption == 5 then
-             -- Cycle Speed logic (Keep existing)
+        elseif index == 5 then
              local speeds = {0.1, 0.5, 1.0, 2.0, 5.0, 10.0}
              local current = noclipSpeed
              local idx = 1
@@ -3925,29 +4329,38 @@ local function HandleMenuSelection()
              if idx > #speeds then idx = 1 end
              noclipSpeed = speeds[idx]
              ShowDynastyNotification("Noclip Speed: " .. noclipSpeed)
-         elseif selectedOption == 6 then
+         elseif index == 6 then
              ToggleAntiHeadshot(not antiHeadshotActive)
-         elseif selectedOption == 7 then
+         elseif index == 7 then
              antiFreezeActive = not antiFreezeActive
              if antiFreezeActive then
                  ShowDynastyNotification("Anti Freeze: ~g~ON ~w~(Anti-Admin)")
              else
                  ShowDynastyNotification("Anti Freeze: ~r~OFF")
              end
-        elseif selectedOption == 8 then
+        elseif index == 8 then
             ToggleStaffMode()
         end
 
-    elseif currentMenu == "COMBAT" then
-        if selectedOption == 1 then
+    elseif menu == "COMBAT" then
+        if index == 1 then
             GiveAllModdedWeapons()
-        elseif selectedOption == 2 then
+        elseif index == 2 then
             RemoveAllWeapons()
+        elseif index == 3 then
+            shootVisionActive = not shootVisionActive
+            ShowDynastyNotification("Shoot Vision: " .. (shootVisionActive and "~g~ON" or "~r~OFF"))
+            
+            if shootVisionActive then
+                local ped = PlayerPedId()
+                if not GetAnyAvailableWeapon(ped) then
+                    ShowDynastyNotification("~y~Aucune arme trouvée dans l'inventaire")
+                end
+            end
         end
 
-    elseif currentMenu == "MISC" then
-        if selectedOption == 1 or selectedOption == 2 then
-            -- Status Check / GitHub Loader
+    elseif menu == "MISC" then
+        if index == 1 or index == 2 then
             if bypassLoaded then
                 ShowDynastyNotification("Bypass Status: ~g~ACTIVE (Heartbeat OK)")
             else
@@ -3969,73 +4382,73 @@ local function HandleMenuSelection()
                 ShowDynastyNotification("~g~Bypass Loaded Successfully!")
                 bypassLoaded = true
             end
-        elseif selectedOption == 3 then
+        elseif index == 3 then
              ToggleSusanoFreecam()
-        elseif selectedOption == 4 then
+        elseif index == 4 then
              local speeds = {0.1, 0.25, 0.5, 1.0, 2.0, 5.0}
              freecamSpeedIdx = (freecamSpeedIdx % #speeds) + 1
              _G.freecam_speed = speeds[freecamSpeedIdx]
              ShowDynastyNotification("Freecam Speed: ~b~" .. tostring(_G.freecam_speed))
         end
 
-    elseif currentMenu == "VEHICLE" then
-        if selectedOption == 1 then
+    elseif menu == "VEHICLE" then
+        if index == 1 then
             FixVehicle()
-        elseif selectedOption == 2 then
+        elseif index == 2 then
             MaxUpgradeVehicle()
-        elseif selectedOption == 3 then
+        elseif index == 3 then
             BugVehicle()
-        elseif selectedOption == 4 then
+        elseif index == 4 then
             ToggleRampVehicle()
-        elseif selectedOption == 5 then
+        elseif index == 5 then
             ToggleEasyHandling()
-        elseif selectedOption == 6 then
+        elseif index == 6 then
             ToggleForceVehicleEngine(not forceEngineActive)
-        elseif selectedOption == 7 then
+        elseif index == 7 then
             ToggleShiftBoost(not shiftBoostActive)
-        elseif selectedOption == 8 then
+        elseif index == 8 then
             ToggleFOVWarp()
         end
 
-    elseif currentMenu == "TROLL" then
-        if selectedOption == 1 then
+    elseif menu == "TROLL" then
+        if index == 1 then
             LaunchPlayer()
-        elseif selectedOption == 2 then
+        elseif index == 2 then
             LunchPlayer2()
-        elseif selectedOption == 3 then
+        elseif index == 3 then
             ToggleAttachPlayer()
-        elseif selectedOption == 4 then
+        elseif index == 4 then
             ToggleBlackHole()
-        elseif selectedOption == 5 then
+        elseif index == 5 then
             StealOutfit()
-        elseif selectedOption == 6 then
+        elseif index == 6 then
             ToggleSpectate(not spectateActive)
-        elseif selectedOption == 7 then
+        elseif index == 7 then
             BugVehicle()
-        elseif selectedOption == 8 then
+        elseif index == 8 then
             TeleportToPlayer()
         end
 
-    elseif currentMenu == "WARDROBE" then
-        if selectedOption == 1 then
-            ResetOutfit()
-        elseif selectedOption == 2 then
+    elseif menu == "WARDROBE" then
+        if index == 1 then
             RandomOutfit()
-        elseif selectedOption == 3 then
-            SaveCurrentOutfit()
-        elseif selectedOption == 4 then
-            LoadSavedOutfit()
-        elseif selectedOption > 5 then
-            -- Individual component logic if needed
+        elseif index == 2 then
+            LoadOutfit(CommunityOutfits[selectedOutfitIndex])
+        elseif index > 2 then
+            -- Individual component logic handled by slider
         end
 
-    elseif currentMenu == "SETTINGS" then
-        if selectedOption == 1 then
+    elseif menu == "SETTINGS" then
+        if index == 1 then
              _G.menuScale = math.min(1.5, _G.menuScale + 0.1)
-        elseif selectedOption == 2 then
+        elseif index == 2 then
              _G.menuScale = 1.0
         end
     end
+end
+
+local function HandleMenuSelection()
+    ExecuteMenuAction(currentMenu, selectedOption)
 end
 
 local function HandleBackNavigation()
@@ -4218,6 +4631,8 @@ CreateThread(function()
             print("[Menu3] Render Error:", err)
         end
         DrawDynastyNotify() -- Draw Notifications in Susano Frame
+        RenderShootVisionVisuals() -- Draw Shoot Vision visuals in Susano Frame
+        RenderBindingUI() -- Draw Custom Binding UI in Susano Frame
         
         if useSusano then 
             if _G.menuFontId and Susano.PopFont then
@@ -4289,14 +4704,390 @@ CreateThread(function()
 end)
 
 
--- Noclip Keybind (F2)
+-- Universal Keybind Listener
 CreateThread(function()
     while true do
         Wait(0)
-        if IsDisabledControlJustPressed(0, 289) or IsControlJustPressed(0, 289) then -- F2
+        -- Support old noclipBindKey for compatibility
+        if noclipBindKey ~= 0 and (IsDisabledControlJustPressed(0, noclipBindKey) or IsControlJustPressed(0, noclipBindKey)) then
             if type(ToggleNoclip) == "function" then
                 ToggleNoclip()
             end
+        end
+        
+        -- Universal Binds
+        for key, action in pairs(_G.UniversalKeyBinds) do
+            if IsDisabledControlJustPressed(0, key) or IsControlJustPressed(0, key) then
+                if action.menu and action.index then
+                    ExecuteMenuAction(action.menu, action.index)
+                end
+            end
+        end
+    end
+end)
+
+-- Universal Binder (F11)
+CreateThread(function()
+    local function GetCurrentOptionLabel()
+        local menu = currentMenu
+        local index = selectedOption
+        local label = "Option"
+        
+        local fullList = nil
+        if menu == "MAIN" then fullList = mainOptions
+        elseif menu == "PLAYER" then fullList = GetPlayerOptions()
+        elseif menu == "COMBAT" then fullList = combatOptions
+        elseif menu == "VEHICLE" then fullList = vehicleOptions
+        elseif menu == "MISC" then fullList = GetMiscOptions()
+        elseif menu == "WARDROBE" then fullList = GetWardrobeOptions()
+        elseif menu == "SETTINGS" then fullList = GetSettingsOptions()
+        elseif menu == "TROLL" then fullList = trollOptions
+        end
+        
+        if fullList and fullList[index] then
+            local data = fullList[index]
+            label = (type(data) == "table" and data.name or data)
+            label = label:gsub("~[a-z]~", ""):gsub("%[ON%]", ""):gsub("%[OFF%]", "")
+        end
+        return label
+    end
+
+    while true do
+        Wait(0)
+        
+        -- F11 trigger
+        if IsDisabledControlJustPressed(0, 344) or (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x7A)) then
+            isBindingNoclip = true
+            
+            if menuOpen then
+                bindingActionData = { menu = currentMenu, index = selectedOption, label = GetCurrentOptionLabel() }
+            else
+                bindingActionData = { menu = "PLAYER", index = 4, label = "Noclip" }
+            end
+            
+            bindingText = "Appuyez sur une touche F (F3, F5...)"
+            bindingKeyDisplay = ""
+            
+            Wait(300)
+            
+            local currentSelection = 0
+            local active = true
+            while active do
+                Wait(0)
+                
+                -- Capture key (Restricted to F1-F12)
+                for i = 1, 350 do
+                    if i ~= 344 and i ~= 194 and i ~= 177 and i ~= 200 then
+                        if IsDisabledControlJustPressed(0, i) or IsControlJustPressed(0, i) then
+                            local name = _G.ControlNamesMap[i]
+                            if name and name:match("^F%d+$") then 
+                                currentSelection = i
+                                bindingKeyDisplay = name
+                                bindingText = "Touche sélectionnée"
+                            else
+                                -- Optional: Feedback for non-F keys
+                                -- ShowDynastyNotification("~r~Seules les touches F sont autorisées")
+                            end
+                        end
+                    end
+                end
+                
+                -- F11: Save
+                if IsDisabledControlJustPressed(0, 344) or (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x7A)) then
+                    if currentSelection ~= 0 then
+                        if bindingActionData.menu == "PLAYER" and bindingActionData.index == 4 then
+                            noclipBindKey = currentSelection
+                        end
+                        _G.UniversalKeyBinds[currentSelection] = { 
+                            menu = bindingActionData.menu, 
+                            index = bindingActionData.index,
+                            label = bindingActionData.label
+                        }
+                        ShowDynastyNotification("~g~Bindé: ~w~" .. bindingActionData.label .. " -> " .. bindingKeyDisplay)
+                    end
+                    active = false
+                end
+                
+                -- Backspace: Unbind/Clear
+                if IsDisabledControlJustPressed(0, 194) or IsControlJustPressed(0, 194) or IsDisabledControlJustPressed(0, 177) or IsControlJustPressed(0, 177) then
+                    -- Search and remove any bind for this action?
+                    -- Or just unbind ONLY the key we are currently assigning?
+                    -- Actually, unbinding the key we are pressing is more intuitive.
+                    -- But if we press Backspace, we want to clear the bind for the current action.
+                    for k, v in pairs(_G.UniversalKeyBinds) do
+                        if v.menu == bindingActionData.menu and v.index == bindingActionData.index then
+                            _G.UniversalKeyBinds[k] = nil
+                        end
+                    end
+                    if bindingActionData.menu == "PLAYER" and bindingActionData.index == 4 then
+                        noclipBindKey = 0
+                    end
+                    ShowDynastyNotification("~y~Bind supprimé: ~w~" .. bindingActionData.label)
+                    active = false
+                end
+
+                -- ESC: Cancel
+                if IsDisabledControlJustPressed(0, 200) or IsControlJustPressed(0, 200) or IsDisabledControlJustPressed(0, 202) or IsControlJustPressed(0, 202) then
+                    active = false
+                end
+            end
+            isBindingNoclip = false
+            bindingActionData = nil
+        end
+    end
+end)
+
+-- Helper: Get current shooting source (Camera)
+local function GetShootSource()
+    local camPos = _G.cam_pos
+    local camRot = _G.cam_rot
+    if _G.freecam_active and camPos and camRot then
+        return camPos, camRot
+    end
+    
+    local coord = GetGameplayCamCoord()
+    local rot = GetGameplayCamRot(0)
+    return coord or vector3(0,0,0), rot or vector3(0,0,0)
+end
+
+-- Helper: Get Magic Bullet Target
+local lastTargetScan = 0
+local cachedBestTarget = nil
+
+local function GetMagicBulletTarget()
+    local currentTime = GetGameTimer()
+    if currentTime - lastTargetScan < 100 and cachedBestTarget ~= nil then
+        return cachedBestTarget
+    end
+    lastTargetScan = currentTime
+
+    local playerPed = PlayerPedId()
+    local camCoords, camRot = GetShootSource()
+    if not camCoords or not camRot then return nil end
+    
+    local fovRadiusDeg = 10.0
+    
+    -- Rotation to Direction (Safe)
+    local z = math.rad(camRot.z or 0)
+    local x = math.rad(camRot.x or 0)
+    local num = math.abs(math.cos(x))
+    local camDir = vector3(-math.sin(z) * num, math.cos(z) * num, math.sin(x))
+
+    local bestTarget = nil
+    local shortestDist = 999999.0
+
+    local function EvaluateTarget(ped)
+        if not ped or ped == playerPed or not DoesEntityExist(ped) or IsPedDeadOrDying(ped, true) then return end
+        
+        local pedCoords = GetEntityCoords(ped)
+        if not pedCoords then return end
+        local distToPlayer = #(pedCoords - camCoords)
+        
+        -- High range scan limit for Shoot Vision
+        if distToPlayer < 1500.0 then
+            local pedDir = (pedCoords - camCoords) / distToPlayer
+            local dot = camDir.x * pedDir.x + camDir.y * pedDir.y + camDir.z * pedDir.z
+            local angle = math.deg(math.acos(math.max(-1.0, math.min(1.0, dot))))
+
+            if angle < fovRadiusDeg then
+                local multiplier = 1.0
+                if IsPedAPlayer(ped) then multiplier = 0.5 end
+                if IsPedInAnyVehicle(ped, false) then multiplier = multiplier * 0.8 end
+                
+                local score = (angle * 10.0 + distToPlayer * 0.1) * multiplier
+                if score < shortestDist then
+                    shortestDist = score
+                    bestTarget = ped
+                end
+            end
+        end
+    end
+
+    local peds = GetGamePool('CPed')
+    for i = 1, #peds do EvaluateTarget(peds[i]) end
+
+    local vehicles = GetGamePool('CVehicle')
+    for i = 1, #vehicles do
+        local veh = vehicles[i]
+        if DoesEntityExist(veh) then
+            local vCoords = GetEntityCoords(veh)
+            if vCoords and #(vCoords - camCoords) < 1500.0 then
+                for seat = -1, 6 do
+                    local occupant = GetPedInVehicleSeat(veh, seat)
+                    if occupant ~= 0 and occupant ~= playerPed then
+                        EvaluateTarget(occupant)
+                    end
+                end
+            end
+        end
+    end
+
+    cachedBestTarget = bestTarget
+    return bestTarget
+end
+
+-- Shoot Vision Render Logic
+function RenderShootVisionVisuals()
+    if not shootVisionActive then return end
+    
+    local sw, sh = GetActiveScreenResolution()
+    local centerX, centerY = sw / 2, sh / 2
+    local fovRadiusPx = 80.0 -- Smaller radius
+    
+    -- Draw FOV Circle (Outline White)
+    if Susano and Susano.DrawCircle then
+        Susano.DrawCircle(centerX, centerY, fovRadiusPx, false, 1.0, 1.0, 1.0, 0.2, 1.0, 32)
+        -- Added: Central Crosshair Dot
+        Susano.DrawRectFilled(centerX - 1, centerY - 1, 2, 2, 1.0, 0.0, 0.0, 0.8, 2)
+    end
+    
+    -- Find and Highlight Target
+    shootVisionTarget = GetMagicBulletTarget()
+    if shootVisionTarget and DoesEntityExist(shootVisionTarget) then
+        local targetBone = 24818 -- SKEL_Spine3 (Body)
+        local vehicle = GetVehiclePedIsIn(shootVisionTarget, false)
+        if vehicle ~= 0 then
+            local class = GetVehicleClass(vehicle)
+            if class == 8 or class == 13 then targetBone = 12844 end -- Head for Motorcycles/Cycles
+        end
+        
+        local boneIndex = GetPedBoneIndex(shootVisionTarget, targetBone)
+        local targetPos = GetWorldPositionOfEntityBone(shootVisionTarget, boneIndex)
+        local onScreen, screenX, screenY = GetScreenCoordFromWorldCoord(targetPos.x, targetPos.y, targetPos.z)
+        
+        if onScreen then
+            local pxX, pxY = screenX * sw, screenY * sh
+            if Susano and Susano.DrawRectFilled then
+                -- Red box on dynamic target (Body or Head)
+                Susano.DrawRectFilled(pxX - 5, pxY - 5, 10, 10, 1.0, 0.0, 0.0, 0.8, 2)
+            end
+        end
+    end
+end
+
+-- Shoot Vision Logic Definitions
+
+-- Shoot Vision Thread (Tir avec Magic Bullet / Wall Penetration)
+CreateThread(function()
+    local function RotationToDirection(rotation)
+        if not rotation then return vector3(0,0,1) end
+        local x = math.rad(rotation.x or 0)
+        local z = math.rad(rotation.z or 0)
+        local num = math.abs(math.cos(x))
+        return vector3(-math.sin(z) * num, math.cos(z) * num, math.sin(x))
+    end
+
+    local lastWeaponNotify = 0
+    local shootCooldown = 0
+    
+    while true do
+        Wait(0)
+        if shootVisionActive then
+            -- Check if we are in Freecam and if the correct mode is selected
+            local canShoot = true
+            if _G.freecam_active then
+                if FreecamOptions[FreecamSelectedOption] ~= "Shoot Vision" then
+                    canShoot = false
+                end
+            end
+
+            -- Primary: Left-click (24). Fallback: E (38)
+            local isFiring = (IsDisabledControlPressed(0, 24) or IsControlPressed(0, 24) or IsDisabledControlPressed(0, 38) or IsControlPressed(0, 38)) and canShoot
+
+            if isFiring then
+                local playerPed = PlayerPedId()
+                local weapon = GetAnyAvailableWeapon(playerPed)
+                
+                if weapon and weapon ~= GetHashKey("WEAPON_UNARMED") then
+                    local targetPed = shootVisionTarget
+                    local targetCoords = nil
+                    
+                    if targetPed and DoesEntityExist(targetPed) then
+                        -- MAGIC BULLET Logic: Dynamic Bone (Head for Riders, Spine for others)
+                        local targetBone = 24818
+                        local vehicle = GetVehiclePedIsIn(targetPed, false)
+                        if vehicle ~= 0 then
+                            local class = GetVehicleClass(vehicle)
+                            if class == 8 or class == 13 then targetBone = 12844 end
+                        end
+                        
+                        local boneIndex = GetPedBoneIndex(targetPed, targetBone)
+                        targetCoords = GetWorldPositionOfEntityBone(targetPed, boneIndex)
+                    else
+                        -- RAYCAST Logic: Fallback to aiming at walls/objects
+                        local camCoords, camRot = GetShootSource()
+                        local direction = RotationToDirection(camRot)
+                        local dest = camCoords + (direction * 1000.0)
+                        
+                        -- Use Expensive/Synchronous for reliable wall/ground detection
+                        local ray = StartExpensiveSynchronousShapeTestLosProbe(camCoords.x, camCoords.y, camCoords.z, dest.x, dest.y, dest.z, -1, playerPed, 7)
+                        local _, hit, endCoords = GetShapeTestResult(ray)
+                        if hit == 1 then
+                            targetCoords = endCoords
+                        else
+                            -- Force target to destination if nothing hit
+                            targetCoords = dest
+                        end
+                    end
+
+                    if targetCoords then
+                        local camCoords, camRot = GetShootSource()
+                        local currentTime = GetGameTimer()
+                        
+                        if currentTime - shootCooldown > 200 then
+                            -- SPAWN POINT PRIORITY:
+                            -- 1. If we have a locked Ped, spawn 2.0m BEFORE the target relative to camera.
+                            --    This ensures the bullet travels THROUGH the hitbox for reliable damage registration.
+                            -- 2. If no lock and Freecam, spawn AT CAMERA center + offset.
+                            -- 3. Otherwise, spawn at gameplay camera.
+                            local _, currentCamRot = GetShootSource()
+                            local shootDir = RotationToDirection(currentCamRot)
+
+                            local spawnPoint = camCoords
+                            local destPoint = targetCoords
+
+                            if targetPed and DoesEntityExist(targetPed) then
+                                -- PRECISE BACK-SPAWN v12 (Dynamic Offset):
+                                --Foot: 0.2m, Car: 0.1m, Moto/Cycle: 0.05m
+                                local offset = 0.2
+                                local vehicle = GetVehiclePedIsIn(targetPed, false)
+                                if vehicle ~= 0 then
+                                    local class = GetVehicleClass(vehicle)
+                                    offset = (class == 8 or class == 13) and 0.05 or 0.1
+                                end
+                                
+                                spawnPoint = targetCoords + (shootDir * offset)
+                                destPoint = targetCoords - (shootDir * 8.0)
+                            elseif _G.freecam_active then
+                                -- Free-aim in Freecam
+                                spawnPoint = camCoords + (shootDir * 1.5)
+                                destPoint = targetCoords
+                            end
+
+                            if spawnPoint and destPoint then
+                                -- Final safety check for ShootSingleBulletBetweenCoords
+                                ShootSingleBulletBetweenCoords(
+                                    spawnPoint.x, spawnPoint.y, spawnPoint.z,
+                                    destPoint.x, destPoint.y, destPoint.z,
+                                    100, true, weapon, playerPed, true, true, 2000.0
+                                )
+                                
+                                SetAmmoInClip(playerPed, weapon, 100)
+                                shootCooldown = currentTime
+                            end
+                        end
+                    end
+                else
+                    local time = GetGameTimer()
+                    if time - lastWeaponNotify > 5000 or lastWeaponNotify == 0 then
+                        ShowDynastyNotification("~y~Aucune arme trouvée dans l'inventaire")
+                        lastWeaponNotify = time
+                    end
+                end
+            end
+        else
+            -- Reset notify cooldown if shoot vision is inactive
+            lastWeaponNotify = 0
         end
     end
 end)
