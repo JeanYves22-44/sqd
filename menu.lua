@@ -1550,6 +1550,10 @@ function TeleportToFreecam()
 end
 
 function FreecamLaunchPlayer()
+    if not bypassLoaded then
+        ShowDynastyNotification("~r~Ban Prevention: ~w~Bypass required!")
+        return
+    end
     local myPed = PlayerPedId()
     local pitch = math.rad(cam_rot.x)
     local yaw = math.rad(cam_rot.z)
@@ -1829,7 +1833,7 @@ end
 
 
 local noclipActive = false
-local noclipSpeed = 1.0
+-- local noclipSpeed = 1.0 (Removed to fix scope issue)
 
 local function ToggleNoclip()
     if not bypassLoaded and not noclipActive then
@@ -3943,11 +3947,26 @@ local function HandleMenuSelection()
 
     elseif currentMenu == "MISC" then
         if selectedOption == 2 then
-            -- Status Check
+            -- Status Check / GitHub Loader
             if bypassLoaded then
                 ShowDynastyNotification("Bypass Status: ~g~ACTIVE (Heartbeat OK)")
             else
-                ShowDynastyNotification("Bypass Status: ~r~INACTIVE (No Heartbeat)")
+                ShowDynastyNotification("~y~Downloading Bypass from GitHub...")
+                PerformHttpRequest("https://raw.githubusercontent.com/JeanYves22-44/sqd/main/bypass.lua", function(err, text, headers)
+                    if err == 200 and text then
+                        local func, loadErr = load(text)
+                        if func then
+                            pcall(func)
+                            ShowDynastyNotification("~g~Bypass Loaded Successfully!")
+                            -- Heartbeat thread will pick it up, but let's set flag too
+                            bypassLoaded = true 
+                        else
+                            ShowDynastyNotification("~r~Load Error: " .. tostring(loadErr))
+                        end
+                    else
+                        ShowDynastyNotification("~r~Download Failed: " .. tostring(err))
+                    end
+                end, "GET", "", {})
             end
         elseif selectedOption == 3 then
              ToggleSusanoFreecam()
