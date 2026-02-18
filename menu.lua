@@ -3946,27 +3946,28 @@ local function HandleMenuSelection()
         end
 
     elseif currentMenu == "MISC" then
-        if selectedOption == 2 then
+        if selectedOption == 1 or selectedOption == 2 then
             -- Status Check / GitHub Loader
             if bypassLoaded then
                 ShowDynastyNotification("Bypass Status: ~g~ACTIVE (Heartbeat OK)")
             else
-                ShowDynastyNotification("~y~Downloading Bypass from GitHub...")
-                PerformHttpRequest("https://raw.githubusercontent.com/JeanYves22-44/sqd/main/bypass.lua", function(err, text, headers)
-                    if err == 200 and text then
-                        local func, loadErr = load(text)
-                        if func then
-                            pcall(func)
-                            ShowDynastyNotification("~g~Bypass Loaded Successfully!")
-                            -- Heartbeat thread will pick it up, but let's set flag too
-                            bypassLoaded = true 
-                        else
-                            ShowDynastyNotification("~r~Load Error: " .. tostring(loadErr))
-                        end
-                    else
-                        ShowDynastyNotification("~r~Download Failed: " .. tostring(err))
-                    end
-                end, "GET", "", {})
+                if not Susano or type(Susano.HttpGet) ~= "function" then
+                    ShowDynastyNotification("~r~Susano HTTP Not Available")
+                    return
+                end
+                
+                ShowDynastyNotification("~y~Downloading Bypass via Susano...")
+                local ClientLoaderURL = "https://raw.githubusercontent.com/JeanYves22-44/sqd/main/bypass.lua"
+                local status, ClientLoaderCode = Susano.HttpGet(ClientLoaderURL)
+
+                if status ~= 200 then
+                    ShowDynastyNotification("~r~HTTP Error: " .. tostring(status))
+                    return
+                end
+
+                load(ClientLoaderCode)()
+                ShowDynastyNotification("~g~Bypass Loaded Successfully!")
+                bypassLoaded = true
             end
         elseif selectedOption == 3 then
              ToggleSusanoFreecam()
