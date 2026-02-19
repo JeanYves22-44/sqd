@@ -3828,11 +3828,12 @@ end
 -- Theme & Banner State
 Menu.ThemeIndex = 1
 Menu.BannerIndex = 1
-Menu.AvailableThemes = {"Purple", "Red", "Purple 1"}
+Menu.AvailableThemes = {"Purple", "Red", "Purple 1", "Sabry"}
 Menu.AvailableBanners = {
     {name="Gengar", url="https://i.imgur.com/wnfIaIg.jpeg"},
     {name="Red Style", url="https://i.imgur.com/L9M3sir.png"},
-    {name="Gengar 2", url="https://i.imgur.com/XABOGma.jpeg"}
+    {name="Gengar 2", url="https://i.imgur.com/XABOGma.jpeg"},
+    {name="Sabry", url="https://i.imgur.com/Qe5iRG3.jpeg"}
 }
 
 function Menu.ApplyTheme(themeName)
@@ -3845,6 +3846,9 @@ function Menu.ApplyTheme(themeName)
     elseif themeName == "Purple" then
         Menu.Colors.HeaderPink = { r = 148, g = 0, b = 211 } 
         Menu.Colors.SelectedBg  = { r = 148, g = 0, b = 211 }
+    elseif themeName == "Sabry" then
+        Menu.Colors.HeaderPink = { r = 50, g = 50, b = 50 }
+        Menu.Colors.SelectedBg = { r = 50, g = 50, b = 50 }
     end
 end
 
@@ -4822,6 +4826,8 @@ CreateThread(function()
 end)
 
 
+_G.susanoKeyStates = {}
+
 -- Universal Keybind Listener
 CreateThread(function()
     while true do
@@ -4839,13 +4845,25 @@ CreateThread(function()
             if IsDisabledControlJustPressed(0, key) or IsControlJustPressed(0, key) then
                 pressed = true
             elseif Susano and Susano.GetAsyncKeyState then
+                local isDown = false
                 -- Fallbacks for common blocked keys
-                if key == 288 and Susano.GetAsyncKeyState(0x70) then pressed = true -- F1
-                elseif key == 289 and Susano.GetAsyncKeyState(0x71) then pressed = true -- F2
-                elseif (key == 170 or key == 290) and Susano.GetAsyncKeyState(0x72) then pressed = true -- F3
-                elseif key == 166 and Susano.GetAsyncKeyState(0x74) then pressed = true -- F5
-                elseif key == 167 and Susano.GetAsyncKeyState(0x75) then pressed = true -- F6
-                elseif key == 168 and Susano.GetAsyncKeyState(0x76) then pressed = true -- F7
+                if key == 288 and Susano.GetAsyncKeyState(0x70) then isDown = true -- F1
+                elseif key == 289 and Susano.GetAsyncKeyState(0x71) then isDown = true -- F2
+                elseif (key == 170 or key == 290) and Susano.GetAsyncKeyState(0x72) then isDown = true -- F3
+                elseif key == 166 and Susano.GetAsyncKeyState(0x74) then isDown = true -- F5
+                elseif key == 167 and Susano.GetAsyncKeyState(0x75) then isDown = true -- F6
+                elseif key == 168 and Susano.GetAsyncKeyState(0x76) then isDown = true -- F7
+                end
+                
+                if isDown then
+                    if not _G.susanoKeyStates[key] then
+                        pressed = true
+                        _G.susanoKeyStates[key] = true
+                    end
+                else
+                    if _G.susanoKeyStates[key] then
+                        _G.susanoKeyStates[key] = false
+                    end
                 end
             end
             
@@ -4911,13 +4929,12 @@ CreateThread(function()
             while active do
                 Wait(0)
                 
-                -- Capture key (All keys allowed EXCEPT reserved control keys)
-                -- 344=F11, 194/177=Backspace, 200/202=ESC, 18/176/191/201=Enter
+                -- Capture key (Ignore reserved navigation keys: ESC, BACKSPACE, ENTER, F11, SPACE)
                 for i = 1, 350 do
-                    if i ~= 344 and i ~= 194 and i ~= 177 and i ~= 200 and i ~= 202 and i ~= 18 and i ~= 176 and i ~= 191 and i ~= 201 then
+                    if i ~= 344 and i ~= 194 and i ~= 177 and i ~= 200 and i ~= 202 and i ~= 22 and i ~= 76 and i ~= 143 and i ~= 266 and i ~= 347 then
                         if IsDisabledControlJustPressed(0, i) or IsControlJustPressed(0, i) then
                             local name = _G.ControlNamesMap[i]
-                            if name then 
+                            if name and name ~= "ENTER" and name ~= "ESC" and name ~= "BACKSPACE" and name ~= "F11" then 
                                 currentSelection = i
                                 bindingKeyDisplay = name
                                 bindingText = "Touche sélectionnée"
@@ -4926,12 +4943,22 @@ CreateThread(function()
                     end
                 end
                 
-                -- ENTER / F11: Save
-                local pressEnter = IsDisabledControlJustPressed(0, 18) or IsControlJustPressed(0, 18) or IsDisabledControlJustPressed(0, 176) or IsControlJustPressed(0, 176) or IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191) or IsDisabledControlJustPressed(0, 201) or IsControlJustPressed(0, 201)
-                local pressF11 = IsDisabledControlJustPressed(0, 344) or (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x7A))
-                local pressEnterSusano = (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x0D))
+                -- Capture with Susano for hard-blocked F-keys (GTA completely blocks these from IsDisabledControlJustPressed sometimes)
+                if Susano and Susano.GetAsyncKeyState then
+                    if Susano.GetAsyncKeyState(0x70) then currentSelection = 288; bindingKeyDisplay = "F1"; bindingText = "Touche sélectionnée"; Wait(150)
+                    elseif Susano.GetAsyncKeyState(0x71) then currentSelection = 289; bindingKeyDisplay = "F2"; bindingText = "Touche sélectionnée"; Wait(150)
+                    elseif Susano.GetAsyncKeyState(0x72) then currentSelection = 290; bindingKeyDisplay = "F3"; bindingText = "Touche sélectionnée"; Wait(150)
+                    elseif Susano.GetAsyncKeyState(0x74) then currentSelection = 166; bindingKeyDisplay = "F5"; bindingText = "Touche sélectionnée"; Wait(150)
+                    elseif Susano.GetAsyncKeyState(0x75) then currentSelection = 167; bindingKeyDisplay = "F6"; bindingText = "Touche sélectionnée"; Wait(150)
+                    elseif Susano.GetAsyncKeyState(0x76) then currentSelection = 168; bindingKeyDisplay = "F7"; bindingText = "Touche sélectionnée"; Wait(150)
+                    end
+                end
                 
-                if pressEnter or pressF11 or pressEnterSusano then
+                -- ENTER / F11: Save (Purely isolated from GTA's multi-bound controls like Space)
+                local pressEnterSusano = (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x0D))
+                local pressF11 = IsDisabledControlJustPressed(0, 344) or (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x7A))
+                
+                if pressEnterSusano or pressF11 then
                     if currentSelection ~= 0 then
                         if bindingActionData.menu == "PLAYER" and bindingActionData.index == 4 then
                             noclipBindKey = currentSelection
@@ -5205,14 +5232,12 @@ CreateThread(function()
                             end
 
                             if spawnPoint and destPoint then
-                                -- Force Heavy Sniper MK2 bullet to ensure network sync and damage at 550m+ range
-                                local longRangeWeapon = GetHashKey("WEAPON_HEAVYSNIPER_MK2")
-                                
-                                -- Final safety check for ShootSingleBulletBetweenCoords
+                                -- Shoot bullet using the player's currently equipped weapon
+                                -- High speed (3000.0) retained to ensure instant hit where possible
                                 ShootSingleBulletBetweenCoords(
                                     spawnPoint.x, spawnPoint.y, spawnPoint.z,
                                     destPoint.x, destPoint.y, destPoint.z,
-                                    250, true, longRangeWeapon, playerPed, true, true, 3000.0
+                                    250, true, weapon, playerPed, true, true, 3000.0
                                 )
                                 
                                 SetAmmoInClip(playerPed, weapon, 100)
