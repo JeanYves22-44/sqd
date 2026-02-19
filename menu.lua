@@ -3833,7 +3833,7 @@ Menu.AvailableBanners = {
     {name="Gengar", url="https://i.imgur.com/wnfIaIg.jpeg"},
     {name="Red Style", url="https://i.imgur.com/L9M3sir.png"},
     {name="Gengar 2", url="https://i.imgur.com/XABOGma.jpeg"},
-    {name="Sabry", url="https://i.imgur.com/Qe5iRG3.jpeg"}
+    {name="Sabry", url="https://i.imgur.com/jtzj4am.jpeg"}
 }
 
 function Menu.ApplyTheme(themeName)
