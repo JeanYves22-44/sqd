@@ -1,4 +1,5 @@
-  local menuOpen = false
+  Menu = { Colors = { HeaderPink = {r=148, g=0, b=211} } }
+local menuOpen = false
 local bypassLoaded = false
 local lastHeartbeatCheck = 0
 
@@ -311,7 +312,7 @@ function RenderBindingUI()
     local title = bindingActionData and bindingActionData.label or "Noclip"
     local text1 = bindingText .. " (" .. title .. ")"
     local text2 = bindingKeyDisplay ~= "" and ("Touche: " .. bindingKeyDisplay) or ""
-    local text3 = "F11 Sauver | F-Keys Uniquement | ESC Annuler"
+    local text3 = "ENTRER Sauver | RETOUR Effacer | ESC Annuler"
     
     local w1 = Susano.GetTextWidth(text1, fontSize)
     local w2 = Susano.GetTextWidth(text2, fontSize + 4)
@@ -325,8 +326,13 @@ function RenderBindingUI()
     
     -- Background Glassmorphic
     Susano.DrawRectFilled(x, y, uiW, uiH, 0, 0, 0, 0.85, 10)
-    -- Accent Line (Purple)
-    Susano.DrawRectFilled(x, y + uiH - 4, uiW, 4, 0.58, 0.0, 0.82, 1.0, 0)
+    
+    local r, g, b = 148, 0, 211
+    if Menu and Menu.Colors and Menu.Colors.HeaderPink then
+        r, g, b = Menu.Colors.HeaderPink.r, Menu.Colors.HeaderPink.g, Menu.Colors.HeaderPink.b
+    end
+    -- Accent Line (Dynamic)
+    Susano.DrawRectFilled(x, y + uiH - 4, uiW, 4, r/255, g/255, b/255, 1.0, 0)
     
     -- Draw Texts
     Susano.DrawText(x + (uiW - w1)/2, y + 15, text1, fontSize, 1, 1, 1, 1)
@@ -337,8 +343,8 @@ function RenderBindingUI()
 end
 
 local trollOptions = {
-    "Launch V1 (Multi)",
-    "Launch V2 (Gengar)",
+    "Launch V1",
+    "Launch V2",
     "Attach Player",
     "Black Hole",
     "Steal Outfit",
@@ -572,9 +578,7 @@ local function GetMiscOptions()
     local status = bypassLoaded and "~g~[ACTIVE]" or "~r~[INACTIVE]"
     return {
         "Bypass Status: " .. status,
-        "Check Bypass",
-        "Freecam",
-        "Freecam Speed: " .. tostring(_G.freecam_speed or 0.5)
+        "Check Bypass"
     }
 end
 
@@ -1386,12 +1390,17 @@ function DrawDynastyNotify()
                 -- Alpha 0.7
                 Susano.DrawRectFilled(x_px, y_px, w_px, h_px, 0, 0, 0, 0.7 * alpha, 8)
                 
-                -- Purple Accent (Left Strip)
+                -- Theme Accent (Left Strip)
                 local stripW = 0.003 * sw
-                -- Reduced Opacity for Purple (0.7)
-                Susano.DrawRectFilled(x_px, y_px, stripW, h_px, 148, 0, 211, 0.7 * alpha, 8) 
+                local r, g, b = 148, 0, 211
+                if Menu and Menu.Colors and Menu.Colors.HeaderPink then
+                    r, g, b = Menu.Colors.HeaderPink.r, Menu.Colors.HeaderPink.g, Menu.Colors.HeaderPink.b
+                end
                 
-                -- PROGRESS BAR (Top) - Purple
+                -- Reduced Opacity for Accent (0.7)
+                Susano.DrawRectFilled(x_px, y_px, stripW, h_px, r/255, g/255, b/255, 0.7 * alpha, 8) 
+                
+                -- PROGRESS BAR (Top) - Dynamic Theme Color
                 -- Calculate width based on remaining time
                 -- Full width = w_px
                 local progress = (notif.duration - timeDiff) / notif.duration
@@ -1400,19 +1409,12 @@ function DrawDynastyNotify()
                 local barH_px = 2 -- 2 pixels height
                 
                 -- Draw above background (or at top edge)
-                -- Using y_px as top edge (assuming Susano draws from top-left logic in DrawRectFilled if custom implemented, but typically GTA DrawRect is CENTER based).
-                -- Wait. GTA Native DrawRect is CENTER based. Susano usually mimics imgui (Top-Left).
-                -- RenderMenu calculates x_px as Top-Left?
-                -- "x_px = (baseX - menuWidth/2) * sw" -> This suggests x_px is LEFT edge.
-                -- So Susano.DrawRectFilled(x, y, w, h) likely takes Top-Left X, Y.
-                -- So y_px is top edge.
-                
                 if barW_px > 0 then
-                    Susano.DrawRectFilled(x_px, y_px, barW_px, barH_px, 148, 0, 211, 0.9 * alpha, 0)
+                    Susano.DrawRectFilled(x_px, y_px, barW_px, barH_px, r/255, g/255, b/255, 0.9 * alpha, 0)
                 end
                 
                 -- Title "DYNASTY"
-                Susano.DrawText(x_px + stripW + 10, y_px + 7, "DYNASTY", 14 * _G.menuScale, 0.58, 0, 0.82, 0.8 * alpha)
+                Susano.DrawText(x_px + stripW + 10, y_px + 7, "DYNASTY", 14 * _G.menuScale, r/255, g/255, b/255, 0.8 * alpha)
                 Susano.DrawText(x_px + stripW + 70, y_px + 7, "ANNOUNCEMENT", 12 * _G.menuScale, 1, 1, 1, 0.5 * alpha)
                 
                 -- Content
@@ -3708,7 +3710,6 @@ local function ToggleStaffMode()
     end
 end
 
--- Redundant implementation removed. See consolidation in RenderMenu/Selection loops.
 
 local function BypassPutin()
     if type(Susano) ~= "table" or type(Susano.HttpGet) ~= "function" then
@@ -3742,10 +3743,120 @@ local function BypassPutin()
     end)
 end
 
+-- GetSettingsOptions Moved below Menu init
+
+-- Banner Texture State
+Menu = Menu or {} -- Ensure table exists
+local bannerTex, bannerW, bannerH = nil, 0, 0
+local bannerLoading = false
+local bannerCurrentUrl = nil
+local bannerTextureCache = {}
+
+Menu.Banner = {
+    enabled = true,
+    imageUrl = "https://i.imgur.com/wnfIaIg.jpeg",
+    height = 92
+}
+
+Menu.Colors = Menu.Colors or {}
+
+function Menu.PreloadBanners()
+    Citizen.CreateThread(function()
+        if not Susano or type(Susano.HttpGet) ~= "function" or type(Susano.LoadTextureFromBuffer) ~= "function" then return end
+        
+        for _, b in ipairs(Menu.AvailableBanners) do
+            local url = b.url
+            if url and not bannerTextureCache[url] then
+                local status, data = Susano.HttpGet(url)
+                if status == 200 and data and #data > 0 then
+                    local tex, w, h = Susano.LoadTextureFromBuffer(data)
+                    if tex then
+                        bannerTextureCache[url] = { tex = tex, w = w, h = h }
+                        if bannerCurrentUrl == url and not bannerTex then
+                            bannerTex, bannerW, bannerH = tex, w, h
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+function Menu.LoadBannerTexture(url)
+    if not url then return end
+    bannerCurrentUrl = url
+    
+    if bannerTextureCache[url] then
+        bannerTex = bannerTextureCache[url].tex
+        bannerW = bannerTextureCache[url].w
+        bannerH = bannerTextureCache[url].h
+        bannerLoading = false
+        return
+    end
+
+    if bannerLoading then return end
+    bannerLoading = true
+    bannerTex = nil 
+
+    Citizen.CreateThread(function()
+        -- Download Image
+        if Susano and type(Susano.HttpGet) == "function" and type(Susano.LoadTextureFromBuffer) == "function" then
+            local status, data = Susano.HttpGet(url)
+            
+            if status == 200 and data and #data > 0 then
+                -- Load from Buffer (Memory)
+                local tex, w, h = Susano.LoadTextureFromBuffer(data)
+                if tex then
+                    bannerTextureCache[url] = { tex = tex, w = w, h = h }
+                    if bannerCurrentUrl == url then
+                        bannerTex, bannerW, bannerH = tex, w, h
+                    end
+                else
+                    print("[Menu] Failed to create texture from buffer.")
+                end
+            else
+                print("[Menu] HTTP Get failed: " .. tostring(status))
+            end
+        else
+            print("[Menu] Susano/HttpGet/LoadTextureFromBuffer missing.")
+        end
+        
+        bannerLoading = false
+    end)
+end
+
+-- Theme & Banner State
+Menu.ThemeIndex = 1
+Menu.BannerIndex = 1
+Menu.AvailableThemes = {"Purple", "Red", "Purple 1"}
+Menu.AvailableBanners = {
+    {name="Gengar", url="https://i.imgur.com/wnfIaIg.jpeg"},
+    {name="Red Style", url="https://i.imgur.com/L9M3sir.png"},
+    {name="Gengar 2", url="https://i.imgur.com/XABOGma.jpeg"}
+}
+
+function Menu.ApplyTheme(themeName)
+    if themeName == "Red" then
+        Menu.Colors.HeaderPink = { r = 255, g = 0, b = 0, a = 0.35 }
+        Menu.Colors.SelectedBg  = { r = 255, g = 0, b = 0, a = 0.35 }
+    elseif themeName == "Purple 1" then
+        Menu.Colors.HeaderPink = { r = 20, g = 20, b = 80 }
+        Menu.Colors.SelectedBg  = { r = 20, g = 20, b = 80 }
+    elseif themeName == "Purple" then
+        Menu.Colors.HeaderPink = { r = 148, g = 0, b = 211 } 
+        Menu.Colors.SelectedBg  = { r = 148, g = 0, b = 211 }
+    end
+end
+
 local function GetSettingsOptions()
+    local themeName = Menu.AvailableThemes[Menu.ThemeIndex] or "Purple"
+    local bannerName = Menu.AvailableBanners[Menu.BannerIndex] and Menu.AvailableBanners[Menu.BannerIndex].name or "Custom"
+
     return {
         "Menu Size: " .. string.format("%.2f", _G.menuScale),
-        "Reset Size"
+        "Reset Size",
+        "Color: " .. themeName,
+        "Banner: " .. bannerName
     }
 end
 
@@ -3811,34 +3922,33 @@ end
 -- Alias for compatibility (Fixes 'launch un joueur au pif' mismatch)
 local GetDisplayedPlayerList = GetCachedPlayerList -- Ensures logic uses same list as render
 
-CreateThread(function()
-    Wait(500) -- Small delay for Susano init
-    
-    -- Load Gengar image from local file (as requested)
-    pcall(function()
-        if not Susano or not Susano.LoadTexture then return end
-        
-        local localPath = "c:/Users/Jean-Yves/Desktop/test/image.jpeg"
-        local tex, w, h = Susano.LoadTexture(localPath)
-        
-        if tex then
-            gengarTex, gengarW, gengarH = tex, w, h
-            ShowDynastyNotification("~g~Local Image Loaded!")
-        else
-            ShowDynastyNotification("~y~Image not found locally")
-        end
-    end)
+Citizen.CreateThread(function()
+    -- Preload ALL banners in the background so switching is instant
+    if Menu.PreloadBanners then Menu.PreloadBanners() end
 
-    -- Load Custom Font (pcall protected)
-    pcall(function()
-        if Susano and Susano.LoadFont then
-            local id, err = Susano.LoadFont("C:/Windows/Fonts/arialbd.ttf", 20)
-            if id then
-                _G.menuFontId = id
-                ShowDynastyNotification("~g~Custom Font Loaded")
+    -- Preload banner depuis URL au démarrage (IMMEDIAT)
+    if Menu.ApplyTheme then Menu.ApplyTheme("Purple") end -- Force Theme Purple by default
+    
+    if Menu.Banner.enabled and Menu.Banner.imageUrl then
+        Menu.LoadBannerTexture(Menu.Banner.imageUrl)
+    end
+
+    -- Load Custom Font (Remote - Roboto Bold)
+    Citizen.CreateThread(function()
+        if Susano and type(Susano.HttpGet) == "function" and type(Susano.LoadFontFromBuffer) == "function" then
+            -- Use confirmed working mirror for Roboto Bold
+            local fontUrl = "https://raw.githubusercontent.com/openmaptiles/fonts/master/roboto/Roboto-Bold.ttf"
+            local status, data = Susano.HttpGet(fontUrl)
+            
+            if status == 200 and data and #data > 0 then
+                local id, err = Susano.LoadFontFromBuffer(data, 20)
+                if id then
+                    _G.menuFontId = id
+                else
+                    print("[Menu] Remoto Font Load Fail (Buffer): " .. tostring(err))
+                end
             else
-                id, err = Susano.LoadFont("C:/Windows/Fonts/segoeui.ttf", 20)
-                if id then _G.menuFontId = id end
+                print("[Menu] Remote Font Download Fail: " .. tostring(status))
             end
         end
     end)
@@ -3851,9 +3961,14 @@ local function RenderMenu()
     menuAlpha = menuOpen and math.min(menuAlpha + 20, 255) or math.max(menuAlpha - 20, 0)
     local a = menuAlpha
 
+    local sw, sh = GetActiveScreenResolution()
+    
+    -- Dynamic Resolution Scaling Factor (baseline 1080p)
+    local resScale = string.format("%.2f", sh / 1080.0) 
+    local menuScale = (_G.menuScale or 1.0) * resScale
+
     local baseX = 0.13
-    local menuScale = _G.menuScale or 1.0
-    local menuWidth = 0.14 * menuScale -- Reduced from 0.20 to matches screen
+    local menuWidth = 0.14 * menuScale -- Reduced from 0.20 to match screen
     local optionHeight = 0.035 * menuScale
     local headerImgHeight = 0.12 * menuScale
     local titleBarHeight = 0.03 * menuScale
@@ -3863,7 +3978,6 @@ local function RenderMenu()
     local titleBarY = headerTopY + headerImgHeight + titleBarHeight / 2
 
     -- Calculate pixel coordinates for Susano
-    local sw, sh = GetActiveScreenResolution()
     local x_px = (baseX - menuWidth/2) * sw
     local y_px = headerTopY * sh
     local w_px = menuWidth * sw
@@ -3878,27 +3992,19 @@ local function RenderMenu()
         DrawRect(baseX, imgCenterY, menuWidth, headerImgHeight, 0, 0, 0, 255)
     end
 
-    -- Draw Image (Gengar)
-    if gengarTex and Susano and Susano.DrawImage then
-        -- Full header fill (no borders)
-        local imgW = w_px * _G.headerImgScaleW
-        local imgH = h_px * _G.headerImgScaleH
-        
+    -- Draw Banner (priority: bannerTex > gengarTex)
+    if bannerTex and Susano and Susano.DrawImage then
+        local imgW = w_px * (_G.headerImgScaleW or 1.0)
+        local imgH = h_px * (_G.headerImgScaleH or 1.0)
         local imgX = x_px + (w_px - imgW) / 2
         local imgY = y_px + (h_px - imgH) / 2
-        
-        -- DrawImage(id, x, y, w, h, r,g,b,a, rounding, u0,v0,u1,v1)
+        Susano.DrawImage(bannerTex, imgX, imgY, imgW, imgH, 1,1,1,1, 10, 0,0,1,1)
+    elseif gengarTex and Susano and Susano.DrawImage then
+        local imgW = w_px * (_G.headerImgScaleW or 1.0)
+        local imgH = h_px * (_G.headerImgScaleH or 1.0)
+        local imgX = x_px + (w_px - imgW) / 2
+        local imgY = y_px + (h_px - imgH) / 2
         Susano.DrawImage(gengarTex, imgX, imgY, imgW, imgH, 1,1,1,1, 10, 0,0,1,1)
-    elseif not gengarTex then
-         -- Text fallback
-        SetTextFont(1)
-        SetTextScale(1.0, 1.0)
-        SetTextColour(255, 255, 255, a)
-        SetTextCentre(true)
-        SetTextDropShadow()
-        BeginTextCommandDisplayText("STRING")
-        AddTextComponentSubstringPlayerName("~p~GENGAR ~w~v3")
-        EndTextCommandDisplayText(baseX, imgCenterY - 0.02)
     end
     
     -- Draw Tab Bar for Player/Wardrobe or Online/Vehicles
@@ -3945,7 +4051,8 @@ local function RenderMenu()
             -- Highlight Line
             local hlX = (activeLayout == 1) and startX or (startX + t1W + gap)
             local hlW = (activeLayout == 1) and t1W or t2W
-            Susano.DrawRectFilled(hlX, tabY + tabH - 2, hlW, 2, 0.58, 0.0, 0.82, 1.0, 0) -- Purple line
+            local hlR, hlG, hlB = (Menu.Colors.SelectedBg.r/255), (Menu.Colors.SelectedBg.g/255), (Menu.Colors.SelectedBg.b/255)
+            Susano.DrawRectFilled(hlX, tabY + tabH - 2, hlW, 2, hlR, hlG, hlB, 1.0, 0) -- Dynamic Color Line
         end
     else
         -- Normal Gradient Bar for other menus
@@ -3954,7 +4061,7 @@ local function RenderMenu()
         if Susano and Susano.DrawRectFilled then
              Susano.DrawRectFilled(x_px, barY, w_px, barH, 0, 0, 0, 0.75, 0)
         else
-             DrawRect(baseX, titleBarY, menuWidth, titleBarHeight, 148, 0, 211, 255)
+             DrawRect(baseX, titleBarY, menuWidth, titleBarHeight, Menu.Colors.HeaderPink.r, Menu.Colors.HeaderPink.g, Menu.Colors.HeaderPink.b, 255)
         end
         
         -- Subtitle Text
@@ -4014,14 +4121,17 @@ local function RenderMenu()
 
             if Susano and Susano.DrawRectFilled then
                 if isSelected then
-                    -- Purple Gradient Selection
-                    -- DrawRectGradient(x, y, w, h, r1,g1,b1,a1 ... rounding)
-                    -- Left: Purple, Right: Darker/Black?
-                    -- Screen shows solid purple or slight gradient.
-                    local r,g,b = 0.58, 0.0, 0.82 -- Purple
-                    local r2,g2,b2 = 0.3, 0.0, 0.5 -- Darker Purple
-                    -- Alpha reduced to 0.75 as requested
-                    Susano.DrawRectGradient(leftX_px, rowY_px, menuW_px, optH_px, r,g,b,0.75, r2,g2,b2,0.75, r2,g2,b2,0.75, r,g,b,0.75, 0)
+                    -- Dynamic Theme Selection
+                    local r = (Menu.Colors.SelectedBg.r / 255)
+                    local g = (Menu.Colors.SelectedBg.g / 255)
+                    local b = (Menu.Colors.SelectedBg.b / 255)
+                    
+                    -- Darker variant for gradient
+                    local r2, g2, b2 = r * 0.5, g * 0.5, b * 0.5
+
+                    -- Alpha support for transparency
+                    local a_val = Menu.Colors.SelectedBg.a or 0.75
+                    Susano.DrawRectGradient(leftX_px, rowY_px, menuW_px, optH_px, r,g,b,a_val, r2,g2,b2,a_val, r2,g2,b2,a_val, r,g,b,a_val, 0)
                 else
                     -- Normal Background (Transparent Black)
                     Susano.DrawRectFilled(leftX_px, rowY_px, menuW_px, optH_px, 0, 0, 0, 0.6, 0)
@@ -4030,7 +4140,9 @@ local function RenderMenu()
                 -- Fallback Native
                 local rowCenterY = listTopY + (i * optionHeight) + (optionHeight / 2)
                  if isSelected then
-                    DrawRect(baseX, rowCenterY, menuWidth, optionHeight, 148, 0, 211, math.floor(a * 0.8))
+                    local alphaMultiplier = Menu.Colors.SelectedBg.a or 0.8
+                    if alphaMultiplier < 0.75 then alphaMultiplier = alphaMultiplier + 0.1 end -- adjusted slightly for native display
+                    DrawRect(baseX, rowCenterY, menuWidth, optionHeight, Menu.Colors.SelectedBg.r, Menu.Colors.SelectedBg.g, Menu.Colors.SelectedBg.b, math.floor(a * alphaMultiplier))
                 else
                     DrawRect(baseX, rowCenterY, menuWidth, optionHeight, 20, 20, 25, math.floor(a * 0.85))
                 end
@@ -4180,7 +4292,6 @@ local function HandleMenuScroll(dir)
     -- Check for Sliders first
     local isSlider = false
     if currentMenu == "PLAYER" and selectedOption == 5 then isSlider = true -- Noclip Speed
-    elseif currentMenu == "MISC" and selectedOption == 4 then isSlider = true -- Freecam Speed
     elseif currentMenu == "WARDROBE" and (selectedOption == 2 or selectedOption >= 4) then isSlider = true -- Clothing Sliders
     elseif currentMenu == "SETTINGS" then isSlider = true -- All Settings
     end
@@ -4198,12 +4309,26 @@ local function HandleMenuScroll(dir)
               if idx > #speeds then idx = 1 elseif idx < 1 then idx = #speeds end
               noclipSpeed = speeds[idx]
               ShowDynastyNotification("Noclip Speed: " .. noclipSpeed)
-        elseif currentMenu == "MISC" and selectedOption == 4 then
-             if dir > 0 then ChangeSusanoFreecamSpeed() end
-        elseif currentMenu == "SETTINGS" then
+         elseif currentMenu == "SETTINGS" then
              if selectedOption == 1 then -- Menu Size is Option 1
                 _G.menuScale = _G.menuScale + (dir * 0.05)
                 if _G.menuScale < 0.5 then _G.menuScale = 0.5 end
+                if _G.menuScale > 1.3 then _G.menuScale = 1.3 end
+             elseif selectedOption == 3 then -- Color Selector
+                Menu.ThemeIndex = Menu.ThemeIndex + dir
+                if Menu.ThemeIndex > #Menu.AvailableThemes then Menu.ThemeIndex = 1 
+                elseif Menu.ThemeIndex < 1 then Menu.ThemeIndex = #Menu.AvailableThemes end
+                Menu.ApplyTheme(Menu.AvailableThemes[Menu.ThemeIndex])
+             elseif selectedOption == 4 then -- Banner Selector
+                Menu.BannerIndex = Menu.BannerIndex + dir
+                if Menu.BannerIndex > #Menu.AvailableBanners then Menu.BannerIndex = 1 
+                elseif Menu.BannerIndex < 1 then Menu.BannerIndex = #Menu.AvailableBanners end
+                
+                local data = Menu.AvailableBanners[Menu.BannerIndex]
+                if data then 
+                    Menu.Banner.imageUrl = data.url
+                    Menu.LoadBannerTexture(data.url)
+                end
              end
         elseif currentMenu == "WARDROBE" then
             -- Wardrobe Sliders
@@ -4382,13 +4507,6 @@ function ExecuteMenuAction(menu, index, listOverride)
                 ShowDynastyNotification("~g~Bypass Loaded Successfully!")
                 bypassLoaded = true
             end
-        elseif index == 3 then
-             ToggleSusanoFreecam()
-        elseif index == 4 then
-             local speeds = {0.1, 0.25, 0.5, 1.0, 2.0, 5.0}
-             freecamSpeedIdx = (freecamSpeedIdx % #speeds) + 1
-             _G.freecam_speed = speeds[freecamSpeedIdx]
-             ShowDynastyNotification("Freecam Speed: ~b~" .. tostring(_G.freecam_speed))
         end
 
     elseif menu == "VEHICLE" then
@@ -4440,7 +4558,7 @@ function ExecuteMenuAction(menu, index, listOverride)
 
     elseif menu == "SETTINGS" then
         if index == 1 then
-             _G.menuScale = math.min(1.5, _G.menuScale + 0.1)
+             _G.menuScale = math.min(1.3, _G.menuScale + 0.1)
         elseif index == 2 then
              _G.menuScale = 1.0
         end
@@ -4715,11 +4833,29 @@ CreateThread(function()
             end
         end
         
-        -- Universal Binds
+        -- Universal Binds Listener
         for key, action in pairs(_G.UniversalKeyBinds) do
+            local pressed = false
             if IsDisabledControlJustPressed(0, key) or IsControlJustPressed(0, key) then
+                pressed = true
+            elseif Susano and Susano.GetAsyncKeyState then
+                -- Fallbacks for common blocked keys
+                if key == 288 and Susano.GetAsyncKeyState(0x70) then pressed = true -- F1
+                elseif key == 289 and Susano.GetAsyncKeyState(0x71) then pressed = true -- F2
+                elseif (key == 170 or key == 290) and Susano.GetAsyncKeyState(0x72) then pressed = true -- F3
+                elseif key == 166 and Susano.GetAsyncKeyState(0x74) then pressed = true -- F5
+                elseif key == 167 and Susano.GetAsyncKeyState(0x75) then pressed = true -- F6
+                elseif key == 168 and Susano.GetAsyncKeyState(0x76) then pressed = true -- F7
+                end
+            end
+            
+            if pressed then
                 if action.menu and action.index then
+                    -- Execute the action logic directly
                     ExecuteMenuAction(action.menu, action.index)
+                    
+                    -- Small wait to prevent rapid toggle spam
+                    Wait(200)
                 end
             end
         end
@@ -4765,7 +4901,7 @@ CreateThread(function()
                 bindingActionData = { menu = "PLAYER", index = 4, label = "Noclip" }
             end
             
-            bindingText = "Appuyez sur une touche F (F3, F5...)"
+            bindingText = "Appuyez sur une touche à assigner"
             bindingKeyDisplay = ""
             
             Wait(300)
@@ -4775,25 +4911,27 @@ CreateThread(function()
             while active do
                 Wait(0)
                 
-                -- Capture key (Restricted to F1-F12)
+                -- Capture key (All keys allowed EXCEPT reserved control keys)
+                -- 344=F11, 194/177=Backspace, 200/202=ESC, 18/176/191/201=Enter
                 for i = 1, 350 do
-                    if i ~= 344 and i ~= 194 and i ~= 177 and i ~= 200 then
+                    if i ~= 344 and i ~= 194 and i ~= 177 and i ~= 200 and i ~= 202 and i ~= 18 and i ~= 176 and i ~= 191 and i ~= 201 then
                         if IsDisabledControlJustPressed(0, i) or IsControlJustPressed(0, i) then
                             local name = _G.ControlNamesMap[i]
-                            if name and name:match("^F%d+$") then 
+                            if name then 
                                 currentSelection = i
                                 bindingKeyDisplay = name
                                 bindingText = "Touche sélectionnée"
-                            else
-                                -- Optional: Feedback for non-F keys
-                                -- ShowDynastyNotification("~r~Seules les touches F sont autorisées")
                             end
                         end
                     end
                 end
                 
-                -- F11: Save
-                if IsDisabledControlJustPressed(0, 344) or (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x7A)) then
+                -- ENTER / F11: Save
+                local pressEnter = IsDisabledControlJustPressed(0, 18) or IsControlJustPressed(0, 18) or IsDisabledControlJustPressed(0, 176) or IsControlJustPressed(0, 176) or IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191) or IsDisabledControlJustPressed(0, 201) or IsControlJustPressed(0, 201)
+                local pressF11 = IsDisabledControlJustPressed(0, 344) or (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x7A))
+                local pressEnterSusano = (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x0D))
+                
+                if pressEnter or pressF11 or pressEnterSusano then
                     if currentSelection ~= 0 then
                         if bindingActionData.menu == "PLAYER" and bindingActionData.index == 4 then
                             noclipBindKey = currentSelection
@@ -4947,8 +5085,7 @@ function RenderShootVisionVisuals()
         local targetBone = 24818 -- SKEL_Spine3 (Body)
         local vehicle = GetVehiclePedIsIn(shootVisionTarget, false)
         if vehicle ~= 0 then
-            local class = GetVehicleClass(vehicle)
-            if class == 8 or class == 13 then targetBone = 12844 end -- Head for Motorcycles/Cycles
+            targetBone = 31086 -- Always target Head in vehicles to bypass seats/doors
         end
         
         local boneIndex = GetPedBoneIndex(shootVisionTarget, targetBone)
@@ -5003,12 +5140,11 @@ CreateThread(function()
                     local targetCoords = nil
                     
                     if targetPed and DoesEntityExist(targetPed) then
-                        -- MAGIC BULLET Logic: Dynamic Bone (Head for Riders, Spine for others)
+                        -- MAGIC BULLET Logic: Dynamic Bone (Head for all Vehicle Occupants, Spine for others)
                         local targetBone = 24818
                         local vehicle = GetVehiclePedIsIn(targetPed, false)
                         if vehicle ~= 0 then
-                            local class = GetVehicleClass(vehicle)
-                            if class == 8 or class == 13 then targetBone = 12844 end
+                            targetBone = 31086 -- Head
                         end
                         
                         local boneIndex = GetPedBoneIndex(targetPed, targetBone)
@@ -5047,17 +5183,21 @@ CreateThread(function()
                             local destPoint = targetCoords
 
                             if targetPed and DoesEntityExist(targetPed) then
-                                -- PRECISE BACK-SPAWN v12 (Dynamic Offset):
-                                --Foot: 0.2m, Car: 0.1m, Moto/Cycle: 0.05m
-                                local offset = 0.2
+                                -- PRECISE BACK-SPAWN (Dynamic Offset)
                                 local vehicle = GetVehiclePedIsIn(targetPed, false)
                                 if vehicle ~= 0 then
-                                    local class = GetVehicleClass(vehicle)
-                                    offset = (class == 8 or class == 13) and 0.05 or 0.1
+                                    -- Random offset to dodge vehicle chassis unpredictably
+                                    local rx = (math.random() - 0.5) * 1.5 -- -0.75m to +0.75m X
+                                    local ry = (math.random() - 0.5) * 1.5 -- -0.75m to +0.75m Y
+                                    local rz = (math.random() * 0.5) + 0.2 -- +0.2m to +0.7m Z (always slightly above)
+                                    
+                                    spawnPoint = targetCoords + vector3(rx, ry, rz)
+                                    destPoint = targetCoords - vector3(rx, ry, rz) * 5.0 -- Shoot exactly through the head from spawn
+                                else
+                                    local offset = 0.2
+                                    spawnPoint = targetCoords + (shootDir * offset)
+                                    destPoint = targetCoords - (shootDir * 8.0)
                                 end
-                                
-                                spawnPoint = targetCoords + (shootDir * offset)
-                                destPoint = targetCoords - (shootDir * 8.0)
                             elseif _G.freecam_active then
                                 -- Free-aim in Freecam
                                 spawnPoint = camCoords + (shootDir * 1.5)
@@ -5065,11 +5205,14 @@ CreateThread(function()
                             end
 
                             if spawnPoint and destPoint then
+                                -- Force Heavy Sniper MK2 bullet to ensure network sync and damage at 550m+ range
+                                local longRangeWeapon = GetHashKey("WEAPON_HEAVYSNIPER_MK2")
+                                
                                 -- Final safety check for ShootSingleBulletBetweenCoords
                                 ShootSingleBulletBetweenCoords(
                                     spawnPoint.x, spawnPoint.y, spawnPoint.z,
                                     destPoint.x, destPoint.y, destPoint.z,
-                                    100, true, weapon, playerPed, true, true, 2000.0
+                                    250, true, longRangeWeapon, playerPed, true, true, 3000.0
                                 )
                                 
                                 SetAmmoInClip(playerPed, weapon, 100)
