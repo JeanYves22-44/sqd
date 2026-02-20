@@ -68,13 +68,13 @@ local easyHandlingActive = false
 local carryActive = false
 local carriedVehicle = nil
 local rampVehiclesAttached = {}
-local freecam_active = false
-local freecam_speed = 1.0
+local freeCamActive = false
+local freeCamSpeed = 1.0
 local noclipSpeed = 1.0 -- Added explicit definition
-local freecam_speeds = {0.1, 0.5, 1.0, 2.0, 5.0}
-local freecam_speed_idx = 3
-local freecam_camera = nil
-local freecam_tp_on_exit = false
+local freeCamSpeeds = {0.1, 0.5, 1.0, 2.0, 5.0}
+local freeCamSpeedIdx = 3
+local freeCamCamera = nil
+local freeCamTpOnExit = false
 local throwVehicleActive = false
 local onlineFilterVehicles = false
 local soloSessionActive = false
@@ -246,7 +246,6 @@ local combatOptions = {
 local vehicleOptions = {
     "Fix Vehicle",
     "Max Upgrade",
-    "Delete Vehicle",
     "Bug Vehicle",
     "Ramp Vehicle",
     "Easy Handling",
@@ -680,6 +679,67 @@ local function GiveAllModdedWeapons()
     end
 
     Susano.InjectResource("any", string.format([[
+        local susano = rawget(_G, "Susano")
+        if susano and type(susano) == "table" and type(susano.HookNative) == "function" then
+            susano.HookNative(0x3A87E44BB9A01D54, function(ped, weaponHash) return true, -1569615261 end)
+
+            susano.HookNative(0xADF692B254977C0C, function(ped, weapon, equipNow)
+                if weapon == -1569615261 then
+                    return true
+                end
+                return true
+            end)
+
+            susano.HookNative(0xF25DF915FA38C5F3, function(ped, p1) return end)
+
+            susano.HookNative(0x4899CB088EDF3BCC, function(ped, weaponHash, p2) return end)
+
+            susano.HookNative(0x3795688A307E1EB6, function(ped) return false end)
+            susano.HookNative(0x0A6DB4965674D243, function(ped) return -1569615261 end)
+            susano.HookNative(0xC3287EE3050FB74C, function(weaponHash) return -1569615261 end)
+            susano.HookNative(0x475768A975D5AD17, function(ped, p1) return false end)
+            susano.HookNative(0x8DECB02F88F428BC, function(ped, weaponHash, p2) return false end)
+            susano.HookNative(0x34616828CD07F1A1, function(ped) return false end)
+            susano.HookNative(0x3A50753042A63901, function(ped) return false end)
+            susano.HookNative(0xB2A38826EAB6BCF1, function(ped) return false end)
+            susano.HookNative(0xED958C9C056BF401, function(ped) return false end)
+            susano.HookNative(0x8483E98E8B888A2D, function(ped, p1) return -1569615261 end)
+            susano.HookNative(0xA38DCFFCE89696FA, function(ped, weaponHash) return 0 end)
+            susano.HookNative(0x7FEAD38B326B9F74, function(ped, weaponHash) return 0 end)
+            susano.HookNative(0x3B390A939AF0B5FC, function(ped) return -1 end)
+            susano.HookNative(0x59DE03442B6C9598, function(weaponHash) return -1569615261 end)
+            susano.HookNative(0x3133B907D8B32053, function(weaponHash, componentHash) return 0.3 end)
+            susano.HookNative(0x97A790315D3831FD, function(entity) return 0 end)
+            susano.HookNative(0x48C2BED9180FE123, function(entity) return false end)
+            susano.HookNative(0x89CF5FF3D310A0DB, function(weaponHash) return -1569615261 end)
+            susano.HookNative(0x24B600C29F7F8A9E, function(ped) return false end)
+            susano.HookNative(0x8483E98E8B888AE2, function(ped, p1) return -1569615261 end)
+            susano.HookNative(0xCAE1DC9A0E22A16D, function(ped) return 0 end)
+            susano.HookNative(0x4899CB088EDF59B8, function(ped, weaponHash) return end)
+            susano.HookNative(0x2E1202248937775C, function(ped, weaponHash, ammo) return true, 9999 end)
+            susano.HookNative(0x2B9EEDC07BD06B9F, function(ped, weaponHash) return 0 end)
+        end
+
+        local _GetCurrentPedWeapon = GetCurrentPedWeapon
+        local _RemoveAllPedWeapons = RemoveAllPedWeapons
+        local _RemoveWeaponFromPed = RemoveWeaponFromPed
+        local _SetCurrentPedWeapon = SetCurrentPedWeapon
+
+        GetCurrentPedWeapon = function(ped, ...)
+            return true, GetHashKey("WEAPON_UNARMED")
+        end
+
+        RemoveAllPedWeapons = function(ped, ...) return end
+
+        RemoveWeaponFromPed = function(ped, weapon) return end
+
+        SetCurrentPedWeapon = function(ped, weapon, ...)
+            if weapon == GetHashKey("WEAPON_UNARMED") then
+                return _SetCurrentPedWeapon(ped, weapon, ...)
+            end
+            return
+        end
+
         local weaponAAHash = GetHashKey("weapon_aa")
         local weaponCaveiraHash = GetHashKey("weapon_caveira")
         local weaponSCOMHash = GetHashKey("weapon_SCOM")
@@ -692,6 +752,48 @@ local function GiveAllModdedWeapons()
         local weaponChainsawHash = GetHashKey("weapon_chainsaw")
         local selfPed = PlayerPedId()
 
+        GiveWeaponToPed(selfPed, weaponAAHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponAAHash, 999)
+        SetWeaponDamageModifier(weaponAAHash, 0.0)
+
+        GiveWeaponToPed(selfPed, weaponCaveiraHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponCaveiraHash, 999)
+        SetWeaponDamageModifier(weaponCaveiraHash, 0.0)
+
+        GiveWeaponToPed(selfPed, weaponSCOMHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponSCOMHash, 999)
+        SetWeaponDamageModifier(weaponSCOMHash, 0.0)
+
+        GiveWeaponToPed(selfPed, weaponMCXHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponMCXHash, 999)
+        SetWeaponDamageModifier(weaponMCXHash, 0.0)
+
+        GiveWeaponToPed(selfPed, weaponGrauHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponGrauHash, 999)
+        SetWeaponDamageModifier(weaponGrauHash, 0.0)
+
+        GiveWeaponToPed(selfPed, weaponMidasHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponMidasHash, 999)
+        SetWeaponDamageModifier(weaponMidasHash, 0.0)
+
+        GiveWeaponToPed(selfPed, weaponHackingHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponHackingHash, 999)
+        SetWeaponDamageModifier(weaponHackingHash, 0.0)
+
+        GiveWeaponToPed(selfPed, weaponAkorusHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponAkorusHash, 999)
+        SetWeaponDamageModifier(weaponAkorusHash, 0.0)
+
+        GiveWeaponToPed(selfPed, weaponMidgardHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponMidgardHash, 999)
+        SetWeaponDamageModifier(weaponMidgardHash, 0.0)
+
+        GiveWeaponToPed(selfPed, weaponChainsawHash, 999, false, true)
+        SetPedAmmo(selfPed, weaponChainsawHash, 999)
+        SetWeaponDamageModifier(weaponChainsawHash, 0.0)
+
+        _SetCurrentPedWeapon(selfPed, weaponAAHash, true)
+
         local moddedHashes = {
             weaponAAHash, weaponCaveiraHash, weaponSCOMHash, 
             weaponMCXHash, weaponGrauHash, weaponMidasHash, 
@@ -699,31 +801,83 @@ local function GiveAllModdedWeapons()
             weaponChainsawHash
         }
 
-        for _, hash in ipairs(moddedHashes) do
-            GiveWeaponToPed(selfPed, hash, 999, false, true)
-            SetPedAmmo(selfPed, hash, 999)
-            SetWeaponDamageModifier(hash, 1.0) -- Ensure normal damage
-        end
-
-        SetCurrentPedWeapon(selfPed, weaponAAHash, true)
-
-        -- BLOCK REMOVAL (NATIVE HOOK)
-        local susano = rawget(_G, "Susano")
-        if susano and type(susano) == "table" and type(susano.HookNative) == "function" then
-            -- Block RemoveAllPedWeapons
-            susano.HookNative(0xF25DF915FA38C5F3, function(ped, p1) return end)
-            -- Block RemoveWeaponFromPed
-            susano.HookNative(0x4899CB088EDF3BCC, function(ped, weaponHash, p2) return end)
-            -- Block SetCurrentPedWeapon (Only if it's trying to set to unarmed while holding modded)
-            susano.HookNative(0xADF692B254977C0C, function(ped, weapon, equipNow)
-                if weapon == -1569615261 then -- UNARMED
-                    local current = GetSelectedPedWeapon(playerPed)
+        -- BLOCK DAMAGE AT SOURCE (NATIVE HOOK)
+        if susano and susano.HookNative then
+            susano.HookNative(0x697157CED63F18D4, function(ped, damage, p2, attacker, weaponHash)
+                if attacker == PlayerPedId() then
                     for _, h in ipairs(moddedHashes) do
-                        if current == h then return false end -- Block switch to unarmed
+                        if weaponHash == h then return false end
                     end
                 end
                 return true
             end)
+        end
+
+        -- Persistent No-Ragdoll Loop for Targets (High Frequency)
+        Citizen.CreateThread(function()
+            while true do
+                Wait(0)
+                local playerPed = PlayerPedId()
+                local currentWeapon = GetSelectedPedWeapon(playerPed)
+                local isModded = false
+                
+                for _, hash in ipairs(moddedHashes) do
+                    if currentWeapon == hash then
+                        isModded = true
+                        break
+                    end
+                end
+
+                if isModded then
+                    -- 1. Check free aim target
+                    local found, target = GetEntityPlayerIsFreeAimingAt(PlayerId())
+                    if not found then
+                        -- 2. Check lock-on/combat target
+                        target = GetPedTargetEntity(playerPed)
+                        found = DoesEntityExist(target)
+                    end
+
+                    if found and DoesEntityExist(target) and IsEntityAPed(target) then
+                        -- High-intensity ragdoll prevention (Targeted at real players)
+                        SetEntityProofs(target, true, true, true, true, true, true, true, true)
+                        SetPedCanRagdoll(target, false)
+                        SetPedRagdollOnCollision(target, false)
+                        SetPedConfigFlag(target, 122, true) -- CPED_CONFIG_FLAG_NoRagdoll
+                        SetPedRagdollForceThreshold(target, 1000000.0)
+                        SetPedCanPlayInjuryAnims(target, false)
+                        SetPedFlinchAbility(target, false)
+                        SetEntityCanBeDamaged(target, false)
+                        SetEntityInvincible(target, true) -- Essential for avoiding client-side death sims
+
+                        -- Force up if they manage to fall (local sync fix)
+                        if IsPedRagdoll(target) or IsPedDeadOrDying(target) then
+                            ClearPedTasksImmediately(target)
+                        end
+                    end
+                end
+            end
+        end)
+
+        -- BLOCK RAGDOLL NATIVES DIRECTLY
+        if susano and susano.HookNative then
+            local ragdollNatives = {
+                0xAE99F17E24650608, -- SetPedToRagdoll
+                0xD0A73719; -- SetPedToRagdollWithFall
+                0x07115160; -- SetPedToRagdollWithBomb
+                0x0E689C8F; -- SetPedToRagdollWithCollision
+                0x0F5DF0D5; -- SetPedToRagdollWithForce
+            }
+            for _, native in ipairs(ragdollNatives) do
+                susano.HookNative(native, function(ped, ...)
+                    -- If any modded weapon is active, block ragdoll on peds
+                    local playerPed = PlayerPedId()
+                    local weapon = GetSelectedPedWeapon(playerPed)
+                    for _, h in ipairs(moddedHashes) do
+                        if weapon == h then return false end
+                    end
+                    return true
+                end)
+            end
         end
     ]]))
 
@@ -2059,18 +2213,7 @@ function ToggleSusanoFreecam()
     end
 end
 
--- Freecam Speed logic
-function ChangeSusanoFreecamSpeed()
-    freecam_speed_idx = (freecam_speed_idx % #freecam_speeds) + 1
-    freecam_speed = freecam_speeds[freecam_speed_idx]
-    _G.freecam_speed = freecam_speed
-    
-    -- Update derived speeds
-    normal_speed = freecam_speed
-    fast_speed = freecam_speed * 5.0
-    
-    ShowDynastyNotification("Freecam Speed: ~p~" .. tostring(freecam_speed) .. "x")
-end
+-- Redundant Freecam Speed logic removed, using GetMiscOptions dynamic string
 
 
 
@@ -2279,29 +2422,6 @@ local function MaxUpgradeVehicle()
         SetVehicleWindowTint(veh, 1) -- Pure Black
         
         ShowDynastyNotification("Vehicle: ~g~MAX UPGRADED ~p~(Full Custom - No Stickers)")
-    else
-        ShowDynastyNotification("~r~Not in vehicle")
-    end
-end
-
-local function DeleteCurrentVehicle()
-    local ped = PlayerPedId()
-    if IsPedInAnyVehicle(ped, false) then
-        local veh = GetVehiclePedIsIn(ped, false)
-        SetEntityAsMissionEntity(veh, true, true)
-        DeleteVehicle(veh)
-        if not DoesEntityExist(veh) then
-            ShowDynastyNotification("Vehicle Deleted")
-        else
-            -- Try harder if it fails (e.g. if it's a networked vehicle)
-            NetworkRequestControlOfEntity(veh)
-            DeleteEntity(veh)
-            if not DoesEntityExist(veh) then
-                ShowDynastyNotification("Vehicle Deleted (Force)")
-            else
-                ShowDynastyNotification("~r~Failed to delete vehicle")
-            end
-        end
     else
         ShowDynastyNotification("~r~Not in vehicle")
     end
@@ -4062,33 +4182,16 @@ local function RenderMenu()
                 label = "Freecam " .. (_G.freecam_active and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "MISC" and index == 4 then
                 label = "Freecam Speed: " .. tostring(_G.freecam_speed or 0.5)
-            elseif currentMenu == "VEHICLE" and index == 5 then
+            elseif currentMenu == "VEHICLE" and index == 4 then
                 label = "Ramp Vehicle " .. (rampVehicleActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 6 then
+            elseif currentMenu == "VEHICLE" and index == 5 then
                 label = "Easy Handling " .. (easyHandlingActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 7 then
+            elseif currentMenu == "VEHICLE" and index == 6 then
                 label = "Force Engine " .. (forceEngineActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 8 then
+            elseif currentMenu == "VEHICLE" and index == 7 then
                 label = "Shift Boost " .. (shiftBoostActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "VEHICLE" and index == 9 then
+            elseif currentMenu == "VEHICLE" and index == 8 then
                 label = "FOV Warp " .. (fovWarpActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "TROLL" and index == 1 then
-                label = "Launch V1 "
-            elseif currentMenu == "TROLL" and index == 2 then
-                label = "Launch V2 "
-            elseif currentMenu == "TROLL" and index == 3 then
-                local isAttached = selectedPlayer and isPlayerAttached(selectedPlayer.id)
-                label = "Attach Player " .. (isAttached and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "TROLL" and index == 4 then
-                label = "Black Hole " .. (blackHoleActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "TROLL" and index == 5 then
-                label = "Steal Outfit "
-            elseif currentMenu == "TROLL" and index == 6 then
-                label = "Spectate " .. (spectateActive and "~g~[ON]" or "~r~[OFF]")
-            elseif currentMenu == "TROLL" and index == 7 then
-                label = "Bug Vehicle "
-            elseif currentMenu == "TROLL" and index == 8 then
-                label = "Teleport To Player "
 
             elseif currentMenu == "ONLINE" then
                 label = string.format("[%d] %s (%dm)", data.serverId or 0, data.name or "Unknown", math.floor(data.dist or 0))
@@ -4282,7 +4385,7 @@ local function HandleMenuScroll(dir)
 end
 end
 
-local function ExecuteMenuAction(menu, index, listOverride)
+function ExecuteMenuAction(menu, index, listOverride)
     local menu = menu or currentMenu
     local index = index or selectedOption
     local fullList = listOverride
@@ -4408,10 +4511,6 @@ local function ExecuteMenuAction(menu, index, listOverride)
                 ShowDynastyNotification("~g~Bypass Loaded Successfully!")
                 bypassLoaded = true
             end
-        elseif index == 3 then
-            ToggleSusanoFreecam()
-        elseif index == 4 then
-            ChangeSusanoFreecamSpeed()
         end
 
     elseif menu == "VEHICLE" then
@@ -4420,18 +4519,16 @@ local function ExecuteMenuAction(menu, index, listOverride)
         elseif index == 2 then
             MaxUpgradeVehicle()
         elseif index == 3 then
-            DeleteCurrentVehicle()
-        elseif index == 4 then
             BugVehicle()
-        elseif index == 5 then
+        elseif index == 4 then
             ToggleRampVehicle()
-        elseif index == 6 then
+        elseif index == 5 then
             ToggleEasyHandling()
-        elseif index == 7 then
+        elseif index == 6 then
             ToggleForceVehicleEngine(not forceEngineActive)
-        elseif index == 8 then
+        elseif index == 7 then
             ToggleShiftBoost(not shiftBoostActive)
-        elseif index == 9 then
+        elseif index == 8 then
             ToggleFOVWarp()
         end
 
