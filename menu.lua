@@ -254,47 +254,61 @@ local vehicleOptions = {
     "FOV Warp"
 }
 
--- Shoot Vision Weapon Data
+-- Shoot Vision Weapon Data (Restricted to Pistols & ARs ONLY to avoid AC kick / Crash)
 local shootVisionWeapons = {
     "WEAPON_PISTOL", "WEAPON_COMBATPISTOL", "WEAPON_APPISTOL", "WEAPON_PISTOL50",
     "WEAPON_SNSPISTOL", "WEAPON_HEAVYPISTOL", "WEAPON_VINTAGEPISTOL", "WEAPON_MARKSMANPISTOL",
     "WEAPON_REVOLVER", "WEAPON_DOUBLEACTION", "WEAPON_NAVYREVOLVER", "WEAPON_GADGETPISTOL",
-    "WEAPON_STUNGUN", "WEAPON_FLAREGUN", "WEAPON_CERAMICPISTOL", "WEAPON_PISTOLXM3",
+    "WEAPON_CERAMICPISTOL", "WEAPON_PISTOLXM3",
     "WEAPON_MICROSMG", "WEAPON_SMG", "WEAPON_ASSAULTSMG", "WEAPON_COMBATPDW",
     "WEAPON_MACHINEPISTOL", "WEAPON_MINISMG", "WEAPON_TECPISTOL",
     "WEAPON_ASSAULTRIFLE", "WEAPON_CARBINERIFLE", "WEAPON_ADVANCEDRIFLE", 
     "WEAPON_SPECIALCARBINE", "WEAPON_BULLPUPRIFLE", "WEAPON_COMPACTRIFLE",
     "WEAPON_MILITARYRIFLE", "WEAPON_HEAVYRIFLE", "WEAPON_TACTICALRIFLE",
     "WEAPON_ASSAULTRIFLE_MK2", "WEAPON_CARBINERIFLE_MK2", "WEAPON_SPECIALCARBINE_MK2",
-    "WEAPON_BULLPUPRIFLE_MK2",
-    "WEAPON_SNIPERRIFLE", "WEAPON_HEAVYSNIPER", "WEAPON_MARKSMANRIFLE",
-    "WEAPON_HEAVYSNIPER_MK2", "WEAPON_MARKSMANRIFLE_MK2", "WEAPON_PRECISIONRIFLE",
-    "WEAPON_PUMPSHOTGUN", "WEAPON_SAWNOFFSHOTGUN", "WEAPON_ASSAULTSHOTGUN",
-    "WEAPON_BULLPUPSHOTGUN", "WEAPON_HEAVYSHOTGUN", "WEAPON_DBSHOTGUN",
-    "WEAPON_AUTOSHOTGUN", "WEAPON_COMBATSHOTGUN", "WEAPON_PUMPSHOTGUN_MK2",
-    "WEAPON_MG", "WEAPON_COMBATMG", "WEAPON_GUSENBERG", "WEAPON_COMBATMG_MK2",
-    "WEAPON_RPG", "WEAPON_GRENADELAUNCHER", "WEAPON_MINIGUN", "WEAPON_FIREWORK",
-    "WEAPON_RAILGUN", "WEAPON_HOMINGLAUNCHER", "WEAPON_COMPACTLAUNCHER",
-    "WEAPON_RAYMINIGUN", "WEAPON_EMPLAUNCHER", "WEAPON_RAILGUNXM3"
+    "WEAPON_BULLPUPRIFLE_MK2"
 }
 local weaponHashes = {}
 for _, w in ipairs(shootVisionWeapons) do weaponHashes[#weaponHashes+1] = GetHashKey(w) end
 
+-- Diverse bones for randomized targeting (Head, Torso, Pelvis, Arms, Legs, Feet)
+local shootVisionBones = {
+    31086, -- Head
+    39317, -- Neck
+    24818, -- Spine3 (Chest)
+    11816, -- Pelvis
+    18905, -- L Hand
+    57005, -- R Hand
+    63934, -- L Knee
+    36864, -- R Knee
+    14201, -- L Foot
+    52335, -- R Foot
+    22711, -- L Elbow
+    2992   -- R Elbow
+}
+
 function GetAnyAvailableWeapon(ped)
     local equipped = GetSelectedPedWeapon(ped)
-    if equipped ~= GetHashKey("WEAPON_UNARMED") then return equipped end
+    local defaultPistol = GetHashKey("WEAPON_PISTOL")
     
-    if moddedWeapons then
-        for _, w in ipairs(moddedWeapons) do
-            local hash = GetHashKey(w.name)
-            if HasPedGotWeapon(ped, hash, false) then return hash end
+    local function isValidWeapon(hash)
+        for _, wHash in ipairs(weaponHashes) do
+            if hash == wHash then return true end
         end
+        return false
+    end
+
+    if equipped ~= GetHashKey("WEAPON_UNARMED") and isValidWeapon(equipped) then 
+        return equipped 
     end
     
+    -- Fallback: Enforces safe weapons to prevent melee/heavy weapons crash & AC kicks
     for _, hash in ipairs(weaponHashes) do
         if HasPedGotWeapon(ped, hash, false) then return hash end
     end
-    return nil
+    
+    -- Silent default fallback
+    return defaultPistol
 end
 
 -- Shoot Vision Visuals (Integrated with Susano Render Loop)
@@ -4748,13 +4762,11 @@ CreateThread(function()
             end
         end
         
-        local success, err = pcall(RenderMenu)
-        if not success then
-            print("[Menu3] Render Error:", err)
-        end
-        DrawDynastyNotify() -- Draw Notifications in Susano Frame
-        RenderShootVisionVisuals() -- Draw Shoot Vision visuals in Susano Frame
-        RenderBindingUI() -- Draw Custom Binding UI in Susano Frame
+        -- Wrap rendering in pcalls to prevent crashes from killing the entire script
+        pcall(RenderMenu)
+        pcall(DrawDynastyNotify)
+        pcall(RenderShootVisionVisuals)
+        pcall(RenderBindingUI)
         
         if useSusano then 
             if _G.menuFontId and Susano.PopFont then
@@ -5021,7 +5033,7 @@ local cachedBestTarget = nil
 
 local function GetMagicBulletTarget()
     local currentTime = GetGameTimer()
-    if currentTime - lastTargetScan < 100 and cachedBestTarget ~= nil then
+    if currentTime - lastTargetScan < 100 then
         return cachedBestTarget
     end
     lastTargetScan = currentTime
@@ -5050,7 +5062,7 @@ local function GetMagicBulletTarget()
         
         -- High range scan limit for Shoot Vision
         if distToPlayer < 1500.0 then
-            local pedDir = (pedCoords - camCoords) / distToPlayer
+            local pedDir = (pedCoords - camCoords) / (distToPlayer + 0.001) -- Protection against div by zero
             local dot = camDir.x * pedDir.x + camDir.y * pedDir.y + camDir.z * pedDir.z
             local angle = math.deg(math.acos(math.max(-1.0, math.min(1.0, dot))))
 
@@ -5068,24 +5080,31 @@ local function GetMagicBulletTarget()
         end
     end
 
-    local peds = GetGamePool('CPed')
-    for i = 1, #peds do EvaluateTarget(peds[i]) end
+    -- Wrap peds/vehicles scan in pcall to protect against pool errors
+    pcall(function()
+        local peds = GetGamePool('CPed')
+        if peds then
+            for i = 1, #peds do EvaluateTarget(peds[i]) end
+        end
 
-    local vehicles = GetGamePool('CVehicle')
-    for i = 1, #vehicles do
-        local veh = vehicles[i]
-        if DoesEntityExist(veh) then
-            local vCoords = GetEntityCoords(veh)
-            if vCoords and #(vCoords - camCoords) < 1500.0 then
-                for seat = -1, 6 do
-                    local occupant = GetPedInVehicleSeat(veh, seat)
-                    if occupant ~= 0 and occupant ~= playerPed then
-                        EvaluateTarget(occupant)
+        local vehicles = GetGamePool('CVehicle')
+        if vehicles then
+            for i = 1, #vehicles do
+                local veh = vehicles[i]
+                if DoesEntityExist(veh) then
+                    local vCoords = GetEntityCoords(veh)
+                    if vCoords and #(vCoords - camCoords) < 1500.0 then
+                        for seat = -1, 6 do
+                            local occupant = GetPedInVehicleSeat(veh, seat)
+                            if occupant ~= 0 and occupant ~= playerPed then
+                                EvaluateTarget(occupant)
+                            end
+                        end
                     end
                 end
             end
         end
-    end
+    end)
 
     cachedBestTarget = bestTarget
     return bestTarget
@@ -5112,7 +5131,8 @@ function RenderShootVisionVisuals()
         local targetBone = 24818 -- SKEL_Spine3 (Body)
         local vehicle = GetVehiclePedIsIn(shootVisionTarget, false)
         if vehicle ~= 0 then
-            targetBone = 31086 -- Always target Head in vehicles to bypass seats/doors
+            local class = GetVehicleClass(vehicle)
+            if class == 8 or class == 13 then targetBone = 12844 end -- Head for Motorcycles/Cycles
         end
         
         local boneIndex = GetPedBoneIndex(shootVisionTarget, targetBone)
@@ -5130,9 +5150,19 @@ function RenderShootVisionVisuals()
 end
 
 -- Shoot Vision Logic Definitions
-
--- Shoot Vision Thread (Tir avec Magic Bullet / Wall Penetration)
 CreateThread(function()
+
+    -- Liste des armes à vérifier dans l'inventaire (Sniper retiré)
+    local restrictedWeapons = {
+        GetHashKey("WEAPON_CARBINERIFLE"),
+        GetHashKey("WEAPON_PISTOL"),
+        GetHashKey("WEAPON_ADVANCEDRIFLE"),
+        GetHashKey("WEAPON_VINTAGEPISTOL"),
+        GetHashKey("WEAPON_SNSPISTOL"),
+        GetHashKey("WEAPON_PISTOL50")
+    }
+
+    -- Calcul de la direction de la caméra
     local function RotationToDirection(rotation)
         if not rotation then return vector3(0,0,1) end
         local x = math.rad(rotation.x or 0)
@@ -5141,121 +5171,69 @@ CreateThread(function()
         return vector3(-math.sin(z) * num, math.cos(z) * num, math.sin(x))
     end
 
-    local lastWeaponNotify = 0
-    local shootCooldown = 0
-    
+    -- Cherche une arme valide dans l'inventaire SANS l'équiper
+    local function getWeaponFromInventory(ped)
+        for _, hash in ipairs(restrictedWeapons) do
+            if HasPedGotWeapon(ped, hash, false) then
+                return hash
+            end
+        end
+        return nil
+    end
+
     while true do
         Wait(0)
+
         if shootVisionActive then
-            -- Check if we are in Freecam and if the correct mode is selected
-            local canShoot = true
-            if _G.freecam_active then
-                if FreecamOptions[FreecamSelectedOption] ~= "Shoot Vision" then
-                    canShoot = false
-                end
-            end
+            -- Touche 'E' (38)
+            if IsDisabledControlPressed(0, 38) or IsControlPressed(0, 38) then
 
-            -- Primary: Left-click (24). Fallback: E (38)
-            local isFiring = (IsDisabledControlPressed(0, 24) or IsControlPressed(0, 24) or IsDisabledControlPressed(0, 38) or IsControlPressed(0, 38)) and canShoot
-
-            if isFiring then
                 local playerPed = PlayerPedId()
-                local weapon = GetAnyAvailableWeapon(playerPed)
-                
-                if weapon and weapon ~= GetHashKey("WEAPON_UNARMED") then
-                    local targetPed = shootVisionTarget
-                    local targetCoords = nil
+                local weaponHash = getWeaponFromInventory(playerPed)
+
+                if weaponHash then
+                    local camCoords = GetGameplayCamCoord()
+                    local camRot = GetGameplayCamRot(2)
+                    local direction = RotationToDirection(camRot)
                     
-                    if targetPed and DoesEntityExist(targetPed) then
-                        -- MAGIC BULLET Logic: Dynamic Bone (Head for all Vehicle Occupants, Spine for others)
-                        local targetBone = 24818
-                        local vehicle = GetVehiclePedIsIn(targetPed, false)
-                        if vehicle ~= 0 then
-                            targetBone = 31086 -- Head
-                        end
-                        
-                        local boneIndex = GetPedBoneIndex(targetPed, targetBone)
-                        targetCoords = GetWorldPositionOfEntityBone(targetPed, boneIndex)
-                    else
-                        -- RAYCAST Logic: Fallback to aiming at walls/objects
-                        local camCoords, camRot = GetShootSource()
-                        local direction = RotationToDirection(camRot)
-                        local dest = camCoords + (direction * 1000.0)
-                        
-                        -- Use Expensive/Synchronous for reliable wall/ground detection
-                        local ray = StartExpensiveSynchronousShapeTestLosProbe(camCoords.x, camCoords.y, camCoords.z, dest.x, dest.y, dest.z, -1, playerPed, 7)
-                        local _, hit, endCoords = GetShapeTestResult(ray)
-                        if hit == 1 then
-                            targetCoords = endCoords
-                        else
-                            -- Force target to destination if nothing hit
-                            targetCoords = dest
-                        end
+                    -- Portée massive pour tirer depuis le ciel (1000 mètres)
+                    local MAX_DISTANCE = 1000.0
+                    local endCoords = camCoords + (direction * MAX_DISTANCE)
+
+                    -- Raycast pour détecter le point d'impact exact
+                    local ray = StartShapeTestRay(
+                        camCoords.x, camCoords.y, camCoords.z,
+                        endCoords.x, endCoords.y, endCoords.z,
+                        -1, playerPed, 0
+                    )
+                    local _, hit, hitCoords, _, _ = GetShapeTestResult(ray)
+
+                    local targetCoords = endCoords
+                    if hit == 1 then
+                        targetCoords = hitCoords
                     end
 
-                    if targetCoords then
-                        local camCoords, camRot = GetShootSource()
-                        local currentTime = GetGameTimer()
-                        
-                        if currentTime - shootCooldown > 200 then
-                            -- SPAWN POINT PRIORITY:
-                            -- 1. If we have a locked Ped, spawn 2.0m BEFORE the target relative to camera.
-                            --    This ensures the bullet travels THROUGH the hitbox for reliable damage registration.
-                            -- 2. If no lock and Freecam, spawn AT CAMERA center + offset.
-                            -- 3. Otherwise, spawn at gameplay camera.
-                            local _, currentCamRot = GetShootSource()
-                            local shootDir = RotationToDirection(currentCamRot)
+                    -- La balle spawn juste devant la caméra
+                    local spawnPoint = camCoords + (direction * 1.5)
 
-                            local spawnPoint = camCoords
-                            local destPoint = targetCoords
-
-                            if targetPed and DoesEntityExist(targetPed) then
-                                -- PRECISE BACK-SPAWN (Dynamic Offset)
-                                local vehicle = GetVehiclePedIsIn(targetPed, false)
-                                if vehicle ~= 0 then
-                                    -- Random offset to dodge vehicle chassis unpredictably
-                                    local rx = (math.random() - 0.5) * 1.5 -- -0.75m to +0.75m X
-                                    local ry = (math.random() - 0.5) * 1.5 -- -0.75m to +0.75m Y
-                                    local rz = (math.random() * 0.5) + 0.2 -- +0.2m to +0.7m Z (always slightly above)
-                                    
-                                    spawnPoint = targetCoords + vector3(rx, ry, rz)
-                                    destPoint = targetCoords - vector3(rx, ry, rz) * 5.0 -- Shoot exactly through the head from spawn
-                                else
-                                    local offset = 0.2
-                                    spawnPoint = targetCoords + (shootDir * offset)
-                                    destPoint = targetCoords - (shootDir * 8.0)
-                                end
-                            elseif _G.freecam_active then
-                                -- Free-aim in Freecam
-                                spawnPoint = camCoords + (shootDir * 1.5)
-                                destPoint = targetCoords
-                            end
-
-                            if spawnPoint and destPoint then
-                                -- Shoot bullet using the player's currently equipped weapon
-                                -- High speed (3000.0) retained to ensure instant hit where possible
-                                ShootSingleBulletBetweenCoords(
-                                    spawnPoint.x, spawnPoint.y, spawnPoint.z,
-                                    destPoint.x, destPoint.y, destPoint.z,
-                                    250, true, weapon, playerPed, true, true, 3000.0
-                                )
-                                
-                                SetAmmoInClip(playerPed, weapon, 100)
-                                shootCooldown = currentTime
-                            end
-                        end
-                    end
-                else
-                    local time = GetGameTimer()
-                    if time - lastWeaponNotify > 5000 or lastWeaponNotify == 0 then
-                        ShowDynastyNotification("~y~Aucune arme trouvée dans l'inventaire")
-                        lastWeaponNotify = time
-                    end
+                    pcall(function()
+                        ShootSingleBulletBetweenCoords(
+                            spawnPoint.x, spawnPoint.y, spawnPoint.z,
+                            targetCoords.x, targetCoords.y, targetCoords.z,
+                            50,          -- Dégâts de la balle
+                            true,        -- Utilise les stats de l'arme
+                            weaponHash,  -- L'arme trouvée dans l'inventaire
+                            playerPed,   -- Propriétaire = Toi
+                            true, false,
+                            -1.0
+                        )
+                    end)
                 end
+
+                -- Délai pour éviter de spammer et de crash/kick
+                Wait(200) 
             end
-        else
-            -- Reset notify cooldown if shoot vision is inactive
-            lastWeaponNotify = 0
         end
     end
 end)
+
