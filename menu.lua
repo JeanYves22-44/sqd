@@ -81,7 +81,7 @@ local onlineFilterVehicles = false
 local soloSessionActive = false
 local shootVisionActive = false
 local shootVisionTarget = nil
-local shootVisionRadiusPx = 40.0
+local shootVisionRadiusPx = 80.0
 local antiTpActive = false
 
 local lastNavTime = 0
@@ -268,7 +268,8 @@ local antiHeadshotActive = false
 local combatOptions = {
     "Give All Weapons",
     "Remove All Weapons",
-    "Shoot Vision"
+    "Shoot Vision",
+    "Shoot Vision FOV"
 }
 
 
@@ -371,11 +372,10 @@ function RenderBindingUI()
     
     local uiW = math.max(w1, w2, w3) + padding * 2
     local uiH = 110
-    
     local x = (sw / 2) - (uiW / 2)
     local y = sh - uiH - 80
-    if isFirstLoadBinding then
-        y = (sh / 2) - (uiH / 2) -- Center for startup
+    if isFirstLoadBinding or isBindingNoclip then
+        y = (sh / 2) - (uiH / 2) -- Centered overlay (Same as startup)
     end
     
     -- Background Glassmorphic
@@ -631,8 +631,6 @@ local function GetMiscOptions()
     return {
         "Bypass Status: " .. status,
         "Check Bypass",
-        "Freecam",
-        "Freecam Speed: " .. tostring(_G.freecam_speed or 0.5),
         "Exploit Staff Menu"
     }
 end
@@ -1652,9 +1650,9 @@ local function ToggleFullGodmode(enable)
     Susano.InjectResource("any", code)
 
     if enable then
-        ShowDynastyNotification("Full Godmode: ~g~ON ~w~(Press ~b~X~w~ to full heal)")
+        -- ShowDynastyNotification("Full Godmode: ~g~ON ~w~(Press ~b~X~w~ to full heal)")
     else
-        ShowDynastyNotification("Full Godmode: ~r~OFF")
+        -- ShowDynastyNotification("Full Godmode: ~r~OFF")
     end
 end
 
@@ -1781,9 +1779,9 @@ local function ToggleSemiGodmode(enable)
     Susano.InjectResource("any", code)
 
     if enable then
-        ShowDynastyNotification("Semi Godmode: ~g~ON ~w~(Press ~b~X~w~ to full heal)")
+        -- ShowDynastyNotification("Semi Godmode: ~g~ON ~w~(Press ~b~X~w~ to full heal)")
     else
-        ShowDynastyNotification("Semi Godmode: ~r~OFF")
+        -- ShowDynastyNotification("Semi Godmode: ~r~OFF")
     end
 end
 
@@ -2065,7 +2063,7 @@ function TeleportToFreecam()
     local ped = PlayerPedId()
     if DoesEntityExist(ped) and cam_pos then
         SetEntityCoords(ped, cam_pos.x, cam_pos.y, cam_pos.z, false, false, false, false)
-        ShowDynastyNotification("~g~Teleported to Camera!")
+        -- ShowDynastyNotification("~g~Teleported to Camera!")
     end
 end
 
@@ -2103,7 +2101,7 @@ function HandleInputMenu()
         local name = FreecamOptions[FreecamSelectedOption]
         if name == "Launch" then
             shootVisionActive = false 
-            ShowDynastyNotification("~b~Launching Target...")
+            -- ShowDynastyNotification("~b~Launching Target...")
             FreecamLaunchPlayer()
         elseif name == "Teleport" then
             shootVisionActive = false
@@ -2111,10 +2109,10 @@ function HandleInputMenu()
         elseif name == "Shoot Vision" then
             if enter_pressed then
                 shootVisionActive = not shootVisionActive
-                ShowDynastyNotification("Shoot Vision: " .. (shootVisionActive and "~g~ON" or "~r~OFF"))
+                -- ShowDynastyNotification("Shoot Vision: " .. (shootVisionActive and "~g~ON" or "~r~OFF"))
             elseif click_pressed and not shootVisionActive then
                 shootVisionActive = true
-                ShowDynastyNotification("Shoot Vision: ~g~ON")
+                -- ShowDynastyNotification("Shoot Vision: ~g~ON")
             end
             
             if shootVisionActive then
@@ -2264,10 +2262,10 @@ function ToggleSusanoFreecam()
     if freecam_active then
         StartFreecam()
         FreecamSelectedOption = 1
-        ShowDynastyNotification("Susano Freecam: ~g~ON")
+        -- ShowDynastyNotification("Susano Freecam: ~g~ON")
     else
         StopFreecam()
-        ShowDynastyNotification("Susano Freecam: ~r~OFF")
+        -- ShowDynastyNotification("Susano Freecam: ~r~OFF")
     end
 end
 
@@ -2357,7 +2355,7 @@ local function ToggleNoclip()
         end)
         ShowDynastyNotification("Noclip: ~g~ON")
     else
-        ShowDynastyNotification("Noclip: ~r~OFF")
+    -- ShowDynastyNotification("Noclip: ~r~OFF")
     end
 end
 
@@ -2374,7 +2372,7 @@ Citizen.CreateThread(function()
             if not wasActive then
                  if DoesEntityExist(ped) then 
                     ClearPedTasksImmediately(ped) 
-                    ShowDynastyNotification("Unfreeze Executed (Anti-Freeze Active)")
+    -- ShowDynastyNotification("Unfreeze Executed (Anti-Freeze Active)")
                  end
                  wasActive = true
             end
@@ -2415,14 +2413,14 @@ local function HealPlayer()
     local ped = PlayerPedId()
     local maxHealth = GetEntityMaxHealth(ped)
     SetEntityHealth(ped, maxHealth)
-    ShowDynastyNotification("Player Healed")
+    -- ShowDynastyNotification("Player Healed")
 end
 
 local function ToggleAntiTeleport()
     antiTpActive = not antiTpActive
     
     if antiTpActive then
-        ShowDynastyNotification("Anti-TP: ~g~ON")
+    -- ShowDynastyNotification("Anti-TP: ~g~ON")
         
         CreateThread(function()
             local lastPos = GetEntityCoords(PlayerPedId())
@@ -2458,14 +2456,14 @@ local function ToggleAntiTeleport()
             end
         end)
     else
-        ShowDynastyNotification("Anti-TP: ~r~OFF")
+    -- ShowDynastyNotification("Anti-TP: ~r~OFF")
     end
 end
 
 local function CleanPed()
     ClearPedBloodDamage(PlayerPedId())
     ResetPedVisibleDamage(PlayerPedId())
-    ShowDynastyNotification("Ped Cleaned")
+    -- ShowDynastyNotification("Ped Cleaned")
 end
 
 local function FixVehicle()
@@ -2476,7 +2474,7 @@ local function FixVehicle()
         SetVehicleDeformationFixed(veh)
         SetVehicleUndriveable(veh, false)
         SetVehicleEngineOn(veh, true, true, false)
-        ShowDynastyNotification("Vehicle Fixed")
+        -- ShowDynastyNotification("Vehicle Fixed")
     else
         ShowDynastyNotification("~r~Not in vehicle")
     end
@@ -2525,7 +2523,7 @@ local function MaxUpgradeVehicle()
         
         SetVehicleWindowTint(veh, 1) -- Pure Black
         
-        ShowDynastyNotification("Vehicle: ~g~MAX UPGRADED ~p~(Full Custom - No Stickers)")
+        -- ShowDynastyNotification("Vehicle: ~g~MAX UPGRADED ~p~(Full Custom - No Stickers)")
     else
         ShowDynastyNotification("~r~Not in vehicle")
     end
@@ -2547,9 +2545,9 @@ local function KickVehicle()
         end
         
         if kickedCount > 0 then
-            ShowDynastyNotification("~g~Kicked " .. kickedCount .. " passenger(s)")
+            -- ShowDynastyNotification("~g~Kicked " .. kickedCount .. " passenger(s)")
         else
-            ShowDynastyNotification("~y~No passengers to kick")
+            -- ShowDynastyNotification("~y~No passengers to kick")
         end
     else
         ShowDynastyNotification("~r~Not in vehicle")
@@ -2566,7 +2564,7 @@ local function ToggleRampVehicle()
             end
         end
         rampVehiclesAttached = {}
-        ShowDynastyNotification("Ramp Vehicle: ~r~OFF")
+        -- ShowDynastyNotification("Ramp Vehicle: ~r~OFF")
         return
     end
 
@@ -2574,14 +2572,14 @@ local function ToggleRampVehicle()
         local playerPed = PlayerPedId()
         if not IsPedInAnyVehicle(playerPed, false) then
             rampVehicleActive = false
-            ShowDynastyNotification("~r~Not in vehicle")
+            -- ShowDynastyNotification("~r~Not in vehicle")
             return
         end
 
         local myVehicle = GetVehiclePedIsIn(playerPed, false)
         if not DoesEntityExist(myVehicle) or GetPedInVehicleSeat(myVehicle, -1) ~= playerPed then
             rampVehicleActive = false
-            ShowDynastyNotification("~r~Not driver")
+            -- ShowDynastyNotification("~r~Not driver")
             return
         end
 
@@ -2604,7 +2602,7 @@ local function ToggleRampVehicle()
 
         if #vehicles < 3 then
             rampVehicleActive = false
-            ShowDynastyNotification("~r~Not enough vehicles nearby")
+            -- ShowDynastyNotification("~r~Not enough vehicles nearby")
             return
         end
 
@@ -2650,13 +2648,13 @@ local function ToggleRampVehicle()
             end
         end
 
-        ShowDynastyNotification("Ramp Vehicle: ~g~ON ~w~(3 vehicles)")
+        -- ShowDynastyNotification("Ramp Vehicle: ~g~ON ~w~(3 vehicles)")
     end)
 end
 
 local function ActivateCarry()
     carryActive = true
-    ShowDynastyNotification("~g~Carry activÃ©! ~p~E~w~ = Porter/Lancer")
+    -- ShowDynastyNotification("~g~Carry activǸ! ~p~E~w~ = Porter/Lancer")
 
     CreateThread(function()
         while carryActive do
@@ -2693,9 +2691,9 @@ local function ActivateCarry()
                         carriedVehicle = closestVeh
                         AttachEntityToEntity(carriedVehicle, ped, GetPedBoneIndex(ped, 28422), 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
                         SetEntityCollision(carriedVehicle, false, false)
-                        ShowDynastyNotification("~g~VÃ©hicule portÃ©!")
+                        -- ShowDynastyNotification("~g~VǸhicule portǸ!")
                     else
-                        ShowDynastyNotification("~r~Aucun vÃ©hicule proche!")
+                        -- ShowDynastyNotification("~r~Aucun vǸhicule proche!")
                     end
                 else
                     DetachEntity(carriedVehicle, true, true)
@@ -2704,7 +2702,7 @@ local function ActivateCarry()
                     SetEntityVelocity(carriedVehicle, forward.x * 150, forward.y * 150, 80.0)
                     ApplyForceToEntity(carriedVehicle, 1, 0, 0, 0, math.random(-50, 50), math.random(-50, 50), math.random(-50, 50), 0, false, true, true, false, true)
                     SetEntityCollision(carriedVehicle, true, true)
-                    ShowDynastyNotification("~r~ðŸš€ LANCÃ‰!")
+                    -- ShowDynastyNotification("~r~Ys? LANC%!")
                     carriedVehicle = nil
                 end
             end
@@ -2727,7 +2725,7 @@ local function DeactivateCarry()
         SetEntityCollision(carriedVehicle, true, true)
         carriedVehicle = nil
     end
-    ShowDynastyNotification("~r~Carry dÃ©sactivÃ©!")
+    -- ShowDynastyNotification("~r~Carry dÃ©sactivÃ©!")
 end
 
 local function ToggleCarryVehicle()
@@ -2764,9 +2762,9 @@ local function ToggleEasyHandling()
                 end
             end
         end)
-        ShowDynastyNotification("Easy Handling: ~g~ON")
+    -- ShowDynastyNotification("Easy Handling: ~g~ON")
     else
-        ShowDynastyNotification("Easy Handling: ~r~OFF")
+    -- ShowDynastyNotification("Easy Handling: ~r~OFF")
     end
 end
 
@@ -2781,11 +2779,11 @@ local function ToggleThrowVehicle()
             SetEntityCollision(throwCarriedVehicle, true, true)
             throwCarriedVehicle = nil
         end
-        ShowDynastyNotification("Throw Vehicle: ~r~OFF")
+        -- ShowDynastyNotification("Throw Vehicle: ~r~OFF")
         return
     end
 
-    ShowDynastyNotification("Throw Vehicle: ~g~ON ~w~(E = Pick up / Throw)")
+    -- ShowDynastyNotification("Throw Vehicle: ~g~ON ~w~(E = Pick up / Throw)")
 
     CreateThread(function()
         while throwVehicleActive do
@@ -2825,9 +2823,9 @@ local function ToggleThrowVehicle()
                         throwCarriedVehicle = closestVeh
                         AttachEntityToEntity(throwCarriedVehicle, ped, GetPedBoneIndex(ped, 28422), 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
                         SetEntityCollision(throwCarriedVehicle, false, false)
-                        ShowDynastyNotification("~g~Vehicle picked up!")
+                        -- ShowDynastyNotification("~g~Vehicle picked up!")
                     else
-                        ShowDynastyNotification("~r~No vehicle nearby!")
+                        -- ShowDynastyNotification("~r~No vehicle nearby!")
                     end
                 else
                     DetachEntity(throwCarriedVehicle, true, true)
@@ -2835,7 +2833,7 @@ local function ToggleThrowVehicle()
                     SetEntityVelocity(throwCarriedVehicle, forward.x * 150.0, forward.y * 150.0, 80.0)
                     ApplyForceToEntity(throwCarriedVehicle, 1, 0.0, 0.0, 0.0, math.random(-50, 50) + 0.0, math.random(-50, 50) + 0.0, math.random(-50, 50) + 0.0, 0, false, true, true, false, true)
                     SetEntityCollision(throwCarriedVehicle, true, true)
-                    ShowDynastyNotification("~r~ðŸš€ THROWN!")
+                    -- ShowDynastyNotification("~r~Ys? THROWN!")
                     throwCarriedVehicle = nil
                 end
             end
@@ -2907,12 +2905,12 @@ local function ToggleForceVehicleEngine(enable)
 
         forceEngineActive = enable
         if enable then
-            ShowDynastyNotification("Force Engine: ~g~ON")
+    -- ShowDynastyNotification("Force Engine: ~g~ON")
         else
-            ShowDynastyNotification("Force Engine: ~r~OFF")
+    -- ShowDynastyNotification("Force Engine: ~r~OFF")
         end
     else
-        ShowDynastyNotification("~r~Susano not available")
+        -- ShowDynastyNotification("~r~Susano not available")
     end
 end
 
@@ -2943,12 +2941,12 @@ local function ToggleShiftBoost(enable)
 
         shiftBoostActive = enable
         if enable then
-            ShowDynastyNotification("Shift Boost: ~g~ON ~w~(SHIFT)")
+    -- ShowDynastyNotification("Shift Boost: ~g~ON ~w~(SHIFT)")
         else
-            ShowDynastyNotification("Shift Boost: ~r~OFF")
+    -- ShowDynastyNotification("Shift Boost: ~r~OFF")
         end
     else
-        ShowDynastyNotification("~r~Susano not available")
+        -- ShowDynastyNotification("~r~Susano not available")
     end
 end
 
@@ -2960,15 +2958,15 @@ local function ToggleSusanoFreecam()
         if type(StopFreecam) == "function" then
             StopFreecam()
         end
-        ShowDynastyNotification("Freecam: ~r~OFF")
+        -- ShowDynastyNotification("Freecam: ~r~OFF")
     else
         if type(StartFreecam) == "function" then
             StartFreecam()
         else
-            ShowDynastyNotification("~r~Freecam not available")
+            -- ShowDynastyNotification("~r~Freecam not available")
             return
         end
-        ShowDynastyNotification("Freecam: ~g~ON ~w~(H to toggle)")
+        -- ShowDynastyNotification("Freecam: ~g~ON ~w~(H to toggle)")
     end
 end
 
@@ -2982,17 +2980,17 @@ local function ChangeSusanoFreecamSpeed()
     if type(SetFreecamSpeed) == "function" then
         SetFreecamSpeed(newSpeed)
     end
-    ShowDynastyNotification("Freecam Speed: ~b~" .. tostring(newSpeed))
+    -- ShowDynastyNotification("Freecam Speed: ~b~" .. tostring(newSpeed))
 end
 
 local function ChangeSusanoFreecamKeybind()
-    ShowDynastyNotification("Freecam Keybind: ~b~H ~w~(fixed)")
+    -- ShowDynastyNotification("Freecam Keybind: ~b~H ~w~(fixed)")
 end
 
 local function LaunchPlayer()
-    if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
+    -- if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
     if not selectedPlayer then 
-        ShowDynastyNotification("~r~No player selected")
+        -- ShowDynastyNotification("~r~No player selected")
         return 
     end
 
@@ -3000,13 +2998,13 @@ local function LaunchPlayer()
     local clientId = GetPlayerFromServerId(targetServerId)
 
     if not clientId or clientId == -1 then
-        ShowDynastyNotification("~r~Player not found")
+        -- ShowDynastyNotification("~r~Player not found")
         return
     end
 
     local targetPed = GetPlayerPed(clientId)
     if not targetPed or not DoesEntityExist(targetPed) then
-        ShowDynastyNotification("~r~Target invalid")
+        -- ShowDynastyNotification("~r~Target invalid")
         return
     end
 
@@ -3065,7 +3063,7 @@ local function LaunchPlayer()
 end
 
 local function LunchPlayer2()
-    if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
+    -- if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
     local myPed = PlayerPedId()
     if not myPed then return end
 
@@ -3112,24 +3110,24 @@ local function LunchPlayer2()
             end
         end
         if not targetPed then
-            ShowDynastyNotification("~r~No player in crosshair")
+            -- ShowDynastyNotification("~r~No player in crosshair")
             return
         end
     else
         -- Mode normal: utiliser le joueur selectionne
         if not selectedPlayer then
-            ShowDynastyNotification("~r~No player selected")
+            -- ShowDynastyNotification("~r~No player selected")
             return
         end
         local targetServerId = selectedPlayer.serverId
         local clientId = GetPlayerFromServerId(targetServerId)
         if not clientId or clientId == -1 then
-            ShowDynastyNotification("~r~Player not found")
+            -- ShowDynastyNotification("~r~Player not found")
             return
         end
         targetPed = GetPlayerPed(clientId)
         if not targetPed or not DoesEntityExist(targetPed) then
-            ShowDynastyNotification("~r~Target invalid")
+            -- ShowDynastyNotification("~r~Target invalid")
             return
         end
     end
@@ -3283,7 +3281,7 @@ local function AttachPlayerToMe(id)
             -- Notification removed
         end
     else
-        ShowDynastyNotification("~r~Player not found (too far?)")
+        -- ShowDynastyNotification("~r~Player not found (too far?)")
     end
 end
 
@@ -3302,13 +3300,13 @@ local function ResetOutfit()
     local model = GetEntityModel(ped)
     SetPlayerModel(PlayerId(), model)
     SetPedDefaultComponentVariation(ped)
-    ShowDynastyNotification("Outfit Reset")
+    -- ShowDynastyNotification("Outfit Reset")
 end
 
 local spectateActive = false
 
 local function ToggleSpectate(enable)
-    if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
+    -- if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
     if not selectedPlayer then return end
     
     if enable then
@@ -3350,7 +3348,7 @@ local function ToggleSpectate(enable)
 end
 
 local function TeleportToPlayer()
-    if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
+    -- if not bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
     if not selectedPlayer then return end
     local targetPed = GetPlayerPed(selectedPlayer.id)
     
@@ -3365,7 +3363,7 @@ local function TeleportToPlayer()
     end
 
     -- Indirect method: Spectate to load
-    ShowDynastyNotification("~y~Target not streamed, forcing load...")
+    -- ShowDynastyNotification("~y~Target not streamed, forcing load...")
     
     NetworkSetInSpectatorMode(true, targetPed)
     
@@ -3385,7 +3383,7 @@ local function TeleportToPlayer()
             attempts = attempts + 1
         end
         NetworkSetInSpectatorMode(false, targetPed)
-        ShowDynastyNotification("~r~Failed to load target")
+        -- ShowDynastyNotification("~r~Failed to load target")
     end)
 end
 
@@ -3398,13 +3396,13 @@ local function ToggleBlackHole()
             _G.black_hole_vehicles = {}
             _G.black_hole_target_player = nil
         end
-        ShowDynastyNotification("Black Hole: ~r~OFF")
+        -- ShowDynastyNotification("Black Hole: ~r~OFF")
         return
     end
 
     if not selectedPlayer then
         blackHoleActive = false
-        ShowDynastyNotification("~r~No player selected")
+        -- ShowDynastyNotification("~r~No player selected")
         return
     end
 
@@ -3413,7 +3411,7 @@ local function ToggleBlackHole()
 
     if not DoesEntityExist(targetPed) then
         blackHoleActive = false
-        ShowDynastyNotification("~r~Target not found")
+        -- ShowDynastyNotification("~r~Target not found")
         return
     end
 
@@ -3492,7 +3490,7 @@ local function ToggleBlackHole()
                 SetModelAsNoLongerNeeded(playerModel)
                 _G.black_hole_active = false
                 blackHoleActive = false
-                ShowDynastyNotification("~r~No vehicles found")
+                -- ShowDynastyNotification("~r~No vehicles found")
                 return
             end
 
@@ -3544,7 +3542,7 @@ local function ToggleBlackHole()
             end
             SetModelAsNoLongerNeeded(playerModel)
 
-            ShowDynastyNotification("Black Hole: ~g~ON ~w~(" .. #_G.black_hole_vehicles .. " vehicles)")
+            -- ShowDynastyNotification("Black Hole: ~g~ON ~w~(" .. #_G.black_hole_vehicles .. " vehicles)")
 
             CreateThread(function()
                 while _G.black_hole_active and blackHoleActive do
@@ -3580,7 +3578,7 @@ local function StealOutfit()
     local targetPed = GetPlayerPed(targetPlayerId)
 
     if not DoesEntityExist(targetPed) then
-        ShowDynastyNotification("~r~Target not found")
+        -- ShowDynastyNotification("~r~Target not found")
         return
     end
 
@@ -3663,7 +3661,7 @@ local function ToggleFOVWarp()
     fovWarpActive = not fovWarpActive
     
     if fovWarpActive then
-        ShowDynastyNotification("FOV Warp: ~g~ON~w~ | Press ~p~E~w~ to warp")
+        -- ShowDynastyNotification("FOV Warp: ~g~ON~w~ | Press ~p~E~w~ to warp")
         
         CreateThread(function()
             if not HasStreamedTextureDictLoaded("commonmenu") then
@@ -3750,13 +3748,13 @@ local function ToggleFOVWarp()
                         
                         -- 3. Take Driver Seat
                         SetPedIntoVehicle(playerPed, targetVeh, -1)
-                        ShowDynastyNotification("~g~Vehicle Hijacked!")
+                        -- ShowDynastyNotification("~g~Vehicle Hijacked!")
                     end
                 end
             end
         end)
     else
-        ShowDynastyNotification("FOV Warp: ~r~OFF")
+        -- ShowDynastyNotification("FOV Warp: ~r~OFF")
     end
 end
 
@@ -3765,12 +3763,15 @@ local staffModeActive = false
 local function ToggleStaffMode()
     staffModeActive = not staffModeActive
     if staffModeActive then
-        ShowDynastyNotification("Staff Mode: ~g~ON ~w~(Shoot player to open menu)")
+    -- ShowDynastyNotification("Staff Mode: ~g~ON ~w~(Shoot player to open menu)")
         
         CreateThread(function()
             while staffModeActive do
                 Wait(0)
                 local ped = PlayerPedId()
+                local targetPed = nil
+                
+                -- Detect via shooting (impact)
                 if IsPedShooting(ped) then
                     local found, coords = GetPedLastWeaponImpactCoord(ped)
                     if found then
@@ -3786,42 +3787,61 @@ local function ToggleStaffMode()
                                 end
                             end
                         end
-                        
-                        if closestPed then
-                            local pId = NetworkGetPlayerIndexFromPed(closestPed)
-                            local sId = GetPlayerServerId(pId)
-                            local name = GetPlayerName(pId)
-                            
-                            selectedPlayer = {
-                                id = pId,
-                                serverId = sId,
-                                name = name
-                            }
-                            currentMenu = "TROLL"
-                            selectedOption = 1 -- Fix: use correct variable
-                            startIndex = 1
-                            menuOpen = true -- Open the menu!
-                            menuAlpha = 1.0
-                            ShowDynastyNotification("Selected: ~b~" .. name)
-                            Wait(500)
-                        end
+                        targetPed = closestPed
                     end
+                end
+                
+                -- Fallback: Detect via crosshair (Safe Zones / Click)
+                if not targetPed and IsDisabledControlJustPressed(0, 24) then
+                    local camCoords = GetGameplayCamCoord()
+                    local camRot = GetGameplayCamRot(2)
+                    local pitch = math.rad(camRot.x)
+                    local yaw = math.rad(camRot.z)
+                    local dir = vector3(-math.sin(yaw) * math.cos(pitch), math.cos(yaw) * math.cos(pitch), math.sin(pitch))
+                    local rayEnd = camCoords + dir * 100.0
+                    
+                    -- Use a capsule cast for "hitbox tolerance" (radius 1.0m)
+                    local raycast = StartShapeTestCapsule(camCoords.x, camCoords.y, camCoords.z, rayEnd.x, rayEnd.y, rayEnd.z, 1.0, 12, ped, 7)
+                    local _, hit, _, _, entityHit = GetShapeTestResult(raycast)
+                    
+                    if hit and entityHit ~= 0 and IsEntityAPed(entityHit) and IsPedAPlayer(entityHit) then
+                        targetPed = entityHit
+                    end
+                end
+
+                if targetPed then
+                    local pId = NetworkGetPlayerIndexFromPed(targetPed)
+                    local sId = GetPlayerServerId(pId)
+                    local name = GetPlayerName(pId)
+                    
+                    selectedPlayer = {
+                        id = pId,
+                        serverId = sId,
+                        name = name
+                    }
+                    currentMenu = "TROLL"
+                    selectedOption = 1
+                    startIndex = 1
+                    menuOpen = true
+                    menuAlpha = 1.0
+                    -- ShowDynastyNotification("Selected: ~b~" .. name)
+                    Wait(500)
                 end
             end
         end)
     else
-        ShowDynastyNotification("Staff Mode: ~r~OFF")
+    -- ShowDynastyNotification("Staff Mode: ~r~OFF")
     end
 end
 
 
 local function BypassPutin()
     if type(Susano) ~= "table" or type(Susano.HttpGet) ~= "function" then
-        ShowDynastyNotification("~r~Error: Susano.HttpGet not available")
+        -- ShowDynastyNotification("~r~Error: Susano.HttpGet not available")
         return
     end
 
-    ShowDynastyNotification("~y~Loading bypass from GitHub...")
+    -- ShowDynastyNotification("~y~Loading bypass from GitHub...")
 
     CreateThread(function()
         local bypassURL = "https://raw.githubusercontent.com/JeanYves22-44/sqd/main/bypass.lua"
@@ -3829,7 +3849,7 @@ local function BypassPutin()
         local status, bypassCode = Susano.HttpGet(bypassURL)
 
         if status ~= 200 or not bypassCode then
-            ShowDynastyNotification("~r~Failed to load bypass (Status: " .. tostring(status) .. ")")
+            -- ShowDynastyNotification("~r~Failed to load bypass (Status: " .. tostring(status) .. ")")
             return
         end
 
@@ -3838,11 +3858,11 @@ local function BypassPutin()
         end)
 
         if not success then
-            ShowDynastyNotification("~r~Bypass error: " .. tostring(err))
+            -- ShowDynastyNotification("~r~Bypass error: " .. tostring(err))
         else
             bypassLoaded = true
             _G.PutinBypassActive__ = true -- Set global flag for persistence
-            ShowDynastyNotification("~g~Bypass Loaded [OK]")
+            -- ShowDynastyNotification("~g~Bypass Loaded [OK]")
         end
     end)
 end
@@ -4301,10 +4321,10 @@ local function RenderMenu()
                 else label = data end
             elseif currentMenu == "COMBAT" then
                 if index == 3 then label = "Shoot Vision"; isToggle = true; toggleActive = shootVisionActive
+                elseif index == 4 then label = "Shoot Vision FOV: " .. math.floor(shootVisionRadiusPx)
                 else label = data end
             elseif currentMenu == "MISC" then
                 if index == 1 then label = "Bypass Status"; badgeOverride = (bypassLoaded and "ACTIVE" or "INACTIVE")
-                elseif index == 3 then label = "Freecam"; isToggle = true; toggleActive = _G.freecam_active
                 else label = data end
             elseif currentMenu == "VEHICLE" then
                 if index == 4 then label = "Ramp Vehicle"; isToggle = true; toggleActive = rampVehicleActive
@@ -4460,6 +4480,7 @@ local function HandleMenuScroll(dir)
     -- Check for Sliders first
     local isSlider = false
     if currentMenu == "PLAYER" and selectedOption == 5 then isSlider = true -- Noclip Speed
+    elseif currentMenu == "COMBAT" and selectedOption == 4 then isSlider = true -- Shoot Vision FOV
     elseif currentMenu == "WARDROBE" and (selectedOption == 2 or selectedOption >= 4) then isSlider = true -- Clothing Sliders
     elseif currentMenu == "SETTINGS" then isSlider = true -- All Settings
     end
@@ -4476,8 +4497,14 @@ local function HandleMenuScroll(dir)
               idx = idx + dir
               if idx > #speeds then idx = 1 elseif idx < 1 then idx = #speeds end
               noclipSpeed = speeds[idx]
-              ShowDynastyNotification("Noclip Speed: " .. noclipSpeed)
-         elseif currentMenu == "SETTINGS" then
+              -- ShowDynastyNotification("Noclip Speed: " .. noclipSpeed)
+        elseif currentMenu == "COMBAT" and selectedOption == 4 then
+              -- FOV Adjustment (Hitbox Radius)
+              shootVisionRadiusPx = shootVisionRadiusPx + (dir * 5.0)
+              if shootVisionRadiusPx < 5.0 then shootVisionRadiusPx = 5.0 end
+              if shootVisionRadiusPx > 400.0 then shootVisionRadiusPx = 400.0 end
+    -- ShowDynastyNotification("Shoot Vision Hitbox: " .. math.floor(shootVisionRadiusPx))
+        elseif currentMenu == "SETTINGS" then
              if selectedOption == 1 then -- Menu Size is Option 1
                 _G.menuScale = _G.menuScale + (dir * 0.05)
                 if _G.menuScale < 0.5 then _G.menuScale = 0.5 end
@@ -4598,13 +4625,13 @@ function ExecuteMenuAction(menu, index, listOverride)
         if target then
             if target.serverId == -1 then
                 selectedPlayer = nil
-                ShowDynastyNotification("~y~Sélection réinitialisée !")
+                -- ShowDynastyNotification("~y~Sélection réinitialisée !")
             elseif selectedPlayer and selectedPlayer.serverId == target.serverId then
                 selectedPlayer = nil
-                ShowDynastyNotification("Désélectionné : ~b~" .. target.name)
+                -- ShowDynastyNotification("Désélectionné : ~b~" .. target.name)
             else
                 selectedPlayer = target
-                ShowDynastyNotification("Activé : ~g~" .. target.name .. " ~w~(Appuie sur E pour Troll)")
+                -- ShowDynastyNotification("Activé : ~g~" .. target.name .. " ~w~(Appuie sur E pour Troll)")
             end
         end
 
@@ -4627,15 +4654,15 @@ function ExecuteMenuAction(menu, index, listOverride)
              idx = idx + 1
              if idx > #speeds then idx = 1 end
              noclipSpeed = speeds[idx]
-             ShowDynastyNotification("Noclip Speed: " .. noclipSpeed)
+             -- ShowDynastyNotification("Noclip Speed: " .. noclipSpeed)
          elseif index == 6 then
              ToggleAntiHeadshot(not antiHeadshotActive)
          elseif index == 7 then
              antiFreezeActive = not antiFreezeActive
              if antiFreezeActive then
-                 ShowDynastyNotification("Anti Freeze: ~g~ON ~w~(Anti-Admin)")
+    -- ShowDynastyNotification("Anti Freeze: ~g~ON ~w~(Anti-Admin)")
              else
-                 ShowDynastyNotification("Anti Freeze: ~r~OFF")
+    -- ShowDynastyNotification("Anti Freeze: ~r~OFF")
              end
          elseif index == 8 then
              ToggleAntiTeleport()
@@ -4650,12 +4677,12 @@ function ExecuteMenuAction(menu, index, listOverride)
             RemoveAllWeapons()
         elseif index == 3 then
             shootVisionActive = not shootVisionActive
-            ShowDynastyNotification("Shoot Vision: " .. (shootVisionActive and "~g~ON" or "~r~OFF"))
+            -- ShowDynastyNotification("Shoot Vision: " .. (shootVisionActive and "~g~ON" or "~r~OFF"))
             
             if shootVisionActive then
                 local ped = PlayerPedId()
                 if not GetAnyAvailableWeapon(ped) then
-                    ShowDynastyNotification("~y~Aucune arme trouvée dans l'inventaire")
+                    -- ShowDynastyNotification("~y~Aucune arme trouvée dans l'inventaire")
                 end
             end
         end
@@ -4663,44 +4690,27 @@ function ExecuteMenuAction(menu, index, listOverride)
     elseif menu == "MISC" then
         if index == 1 or index == 2 then
             if bypassLoaded then
-                ShowDynastyNotification("Bypass Status: ~g~ACTIVE (Heartbeat OK)")
+                -- ShowDynastyNotification("Bypass Status: ~g~ACTIVE (Heartbeat OK)")
             else
                 if not Susano or type(Susano.HttpGet) ~= "function" then
-                    ShowDynastyNotification("~r~Susano HTTP Not Available")
+                    -- ShowDynastyNotification("~r~Susano HTTP Not Available")
                     return
                 end
                 
-                ShowDynastyNotification("~y~Downloading Bypass via Susano...")
+                -- ShowDynastyNotification("~y~Downloading Bypass via Susano...")
                 local ClientLoaderURL = "https://raw.githubusercontent.com/JeanYves22-44/sqd/main/bypass.lua"
                 local status, ClientLoaderCode = Susano.HttpGet(ClientLoaderURL)
 
                 if status ~= 200 then
-                    ShowDynastyNotification("~r~HTTP Error: " .. tostring(status))
+                    -- ShowDynastyNotification("~r~HTTP Error: " .. tostring(status))
                     return
                 end
 
                 load(ClientLoaderCode)()
-                ShowDynastyNotification("~g~Bypass Loaded Successfully!")
+                -- ShowDynastyNotification("~g~Bypass Loaded Successfully!")
                 bypassLoaded = true
             end
         elseif index == 3 then
-            if not _G.freecam_active then
-                StartFreecam()
-            else
-                StopFreecam()
-            end
-        elseif index == 4 then
-            local speeds = {0.1, 0.5, 1.0, 2.0, 5.0}
-            local current = _G.freecam_speed or 0.5
-            local idx = 1
-            for i, s in ipairs(speeds) do
-                if math.abs(s - current) < 0.01 then idx = i break end
-            end
-            idx = idx + 1
-            if idx > #speeds then idx = 1 end
-            _G.freecam_speed = speeds[idx]
-            ShowDynastyNotification("Freecam Speed: " .. _G.freecam_speed)
-        elseif index == 5 then
             ToggleMenuStaff()
         end
 
@@ -4881,13 +4891,18 @@ CreateThread(function()
                 HandleBackNavigation()
             end
 
-            if IsDisabledControlJustPressed(0, KEY_LEFT) or IsDisabledControlJustPressed(0, KEY_RIGHT) then
+            local leftPressed = IsDisabledControlPressed(0, KEY_LEFT)
+            local rightPressed = IsDisabledControlPressed(0, KEY_RIGHT)
+            if leftPressed or rightPressed then
                 if currentMenu == "ONLINE" then
-                    onlineFilterVehicles = not onlineFilterVehicles
-                    selectedOption, startIndex = 1, 1
-                    PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
+                    -- Seul le JustPressed compte pour le filtre Online pour éviter le spam
+                    if IsDisabledControlJustPressed(0, KEY_LEFT) or IsDisabledControlJustPressed(0, KEY_RIGHT) then
+                        onlineFilterVehicles = not onlineFilterVehicles
+                        selectedOption, startIndex = 1, 1
+                        PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
+                    end
                 else
-                    HandleMenuScroll(IsDisabledControlJustPressed(0, KEY_LEFT) and -1 or 1)
+                    HandleMenuScroll(leftPressed and -1 or 1)
                 end
             end
 
@@ -4919,7 +4934,7 @@ CreateThread(function()
                         selectedOption, startIndex = 1, 1
                         PlaySoundFrontend(-1, "NAV_LEFT_RIGHT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
                     else
-                        ShowDynastyNotification("~y~Activez un joueur d'abord ! (Enter)")
+                        -- ShowDynastyNotification("~y~Activez un joueur d'abord ! (Enter)")
                         PlaySoundFrontend(-1, "ERROR", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
                     end
                 end
@@ -4955,7 +4970,7 @@ CreateThread(function()
                 fovHijackKey = keys[nextIndex]
                 fovHijackKeyName = keyMap[fovHijackKey] or "?"
                 
-                ShowDynastyNotification("FOV Hijack Key: ~p~" .. fovHijackKeyName)
+                -- ShowDynastyNotification("FOV Hijack Key: ~p~" .. fovHijackKeyName)
                 Wait(200)
             end
         end
@@ -5161,7 +5176,9 @@ CreateThread(function()
             
             Wait(300)
             
+            local currentSelection = 0
             local currentVK = nil
+            local active = true
             while active do
                 Wait(0)
                 
@@ -5209,7 +5226,7 @@ CreateThread(function()
                             label = bindingActionData.label,
                             vk = currentVK
                         }
-                        ShowDynastyNotification("~g~Bindé: ~w~" .. bindingActionData.label .. " -> " .. bindingKeyDisplay)
+                        -- ShowDynastyNotification("~g~Bindé: ~w~" .. bindingActionData.label .. " -> " .. bindingKeyDisplay)
                     end
                     active = false
                 end
@@ -5228,7 +5245,7 @@ CreateThread(function()
                     if bindingActionData.menu == "PLAYER" and bindingActionData.index == 4 then
                         noclipBindKey = 0
                     end
-                    ShowDynastyNotification("~y~Bind supprimé: ~w~" .. bindingActionData.label)
+                    -- ShowDynastyNotification("~y~Bind supprimé: ~w~" .. bindingActionData.label)
                     active = false
                 end
 
@@ -5388,9 +5405,10 @@ end
 shootVisionActive = false 
 
 local weaponHashes = {
+    GetHashKey("WEAPON_M82V2"),
     GetHashKey("WEAPON_VINTAGEPISTOL"),
     GetHashKey("WEAPON_PISTOL50"),
-    GetHashKey("WEAPON_APPISTOL")
+    GetHashKey("WEAPON_APPISTOL"),
     GetHashKey("WEAPON_SNSPISTOL")
 }
 
@@ -5405,6 +5423,13 @@ CreateThread(function()
     end
 
     local function getWeaponFromInventory(ped)
+        local current = GetSelectedPedWeapon(ped)
+        -- Priorité 1 : L'arme que le joueur tient en main (règle le souci des perm weapons/addons)
+        if current ~= GetHashKey("WEAPON_UNARMED") then
+            return current
+        end
+
+        -- Priorité 2 : Recherche dans la liste si pas d'arme en main
         for _, hash in ipairs(weaponHashes) do
             if HasPedGotWeapon(ped, hash, false) then
                 return hash
