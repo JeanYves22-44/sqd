@@ -397,12 +397,13 @@ end
 local trollOptions = {
     "Launch V1",
     "Launch V2",
+    "Teleport To Player",
+    "Steal Outfit",
     "Attach Player",
     "Black Hole",
-    "Steal Outfit",
     "Spectate",
     "Bug Vehicle",
-    "Teleport To Player"
+    "Bug Player"
 }
 
 
@@ -1083,165 +1084,8 @@ local function HijackTargetVehicle()
     end
 end
 
-local function KickVehicle()
-    if not selectedPlayer then
-        ShowDynastyNotification("~r~No player selected")
-        return
-    end
+-- Unused KickVehicle removed
 
-    local targetServerId = selectedPlayer.serverId
-
-    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
-        Susano.InjectResource("any", string.format([[
-            CreateThread(function()
-                if rawget(_G, 'warp_boost_busy') then return end
-                rawset(_G, 'warp_boost_busy', true)
-
-                local targetServerId = %d
-
-                local targetPlayerId = nil
-                for _, player in ipairs(GetActivePlayers()) do
-                    if GetPlayerServerId(player) == targetServerId then
-                        targetPlayerId = player
-                        break
-                    end
-                end
-
-                if not targetPlayerId then
-                    rawset(_G, 'warp_boost_busy', false)
-                    return
-                end
-
-                local targetPed = GetPlayerPed(targetPlayerId)
-                if not DoesEntityExist(targetPed) then
-                    rawset(_G, 'warp_boost_busy', false)
-                    return
-                end
-
-                if not IsPedInAnyVehicle(targetPed, false) then
-                    rawset(_G, 'warp_boost_busy', false)
-                    return
-                end
-
-                local targetVehicle = GetVehiclePedIsIn(targetPed, false)
-                if not DoesEntityExist(targetVehicle) then
-                    rawset(_G, 'warp_boost_busy', false)
-                    return
-                end
-
-                local playerPed = PlayerPedId()
-                local initialCoords = GetEntityCoords(playerPed)
-                local initialHeading = GetEntityHeading(playerPed)
-
-                local function RequestControl(entity, timeoutMs)
-                    if not entity or not DoesEntityExist(entity) then return false end
-                    local start = GetGameTimer()
-                    NetworkRequestControlOfEntity(entity)
-                    while not NetworkHasControlOfEntity(entity) do
-                        Wait(0)
-                        if GetGameTimer() - start > (timeoutMs or 500) then
-                            return false
-                        end
-                        NetworkRequestControlOfEntity(entity)
-                    end
-                    return true
-                end
-
-                RequestControl(targetVehicle, 800)
-                SetVehicleDoorsLocked(targetVehicle, 1)
-                SetVehicleDoorsLockedForAllPlayers(targetVehicle, false)
-
-                local function tryEnterSeat(seatIndex)
-                    SetPedIntoVehicle(playerPed, targetVehicle, seatIndex)
-                    Wait(0)
-                    return IsPedInVehicle(playerPed, targetVehicle, false) and GetPedInVehicleSeat(targetVehicle, seatIndex) == playerPed
-                end
-
-                local function getFirstFreeSeat(v)
-                    local numSeats = GetVehicleModelNumberOfSeats(GetEntityModel(v))
-                    if not numSeats or numSeats <= 0 then return -1 end
-                    for seat = 0, (numSeats - 2) do
-                        if IsVehicleSeatFree(v, seat) then return seat end
-                    end
-                    return -1
-                end
-
-                ClearPedTasksImmediately(playerPed)
-                SetVehicleDoorsLocked(targetVehicle, 1)
-                SetVehicleDoorsLockedForAllPlayers(targetVehicle, false)
-
-                local takeoverSuccess = false
-                local tStart = GetGameTimer()
-
-                while (GetGameTimer() - tStart) < 1000 do
-                    RequestControl(targetVehicle, 400)
-
-                    if IsVehicleSeatFree(targetVehicle, -1) and tryEnterSeat(-1) then
-                        takeoverSuccess = true
-                        break
-                    end
-
-                    if not IsPedInVehicle(playerPed, targetVehicle, false) then
-                        local fs = getFirstFreeSeat(targetVehicle)
-                        if fs ~= -1 then
-                            tryEnterSeat(fs)
-                        end
-                    end
-
-                    local drv = GetPedInVehicleSeat(targetVehicle, -1)
-                    if drv ~= 0 and drv ~= playerPed and DoesEntityExist(drv) then
-                        RequestControl(drv, 400)
-                        ClearPedTasksImmediately(drv)
-                        SetEntityAsMissionEntity(drv, true, true)
-                        SetEntityCoords(drv, 0.0, 0.0, -100.0, false, false, false, false)
-                        Wait(20)
-                        DeleteEntity(drv)
-                    end
-
-                    local t0 = GetGameTimer()
-                    while (GetGameTimer() - t0) < 400 do
-                        local occ = GetPedInVehicleSeat(targetVehicle, -1)
-                        if occ == 0 or (occ ~= 0 and not DoesEntityExist(occ)) then break end
-                        Wait(0)
-                    end
-
-                    local t1 = GetGameTimer()
-                    while (GetGameTimer() - t1) < 500 do
-                        if IsVehicleSeatFree(targetVehicle, -1) and tryEnterSeat(-1) then
-                            takeoverSuccess = true
-                            break
-                        end
-                        Wait(0)
-                    end
-                    if takeoverSuccess then break end
-                    Wait(0)
-                end
-
-                if takeoverSuccess then
-                    if DoesEntityExist(targetVehicle) and IsPedInVehicle(playerPed, targetVehicle, false) then
-                        RequestControl(targetVehicle, 1000)
-                        if NetworkHasControlOfEntity(targetVehicle) then
-                            FreezeEntityPosition(targetVehicle, true)
-                            SetVehicleEngineOn(targetVehicle, true, true, false)
-                            SetEntityCoordsNoOffset(targetVehicle, initialCoords.x, initialCoords.y, initialCoords.z + 1.0, false, false, false, false)
-                            SetEntityHeading(targetVehicle, initialHeading)
-                            SetEntityVelocity(targetVehicle, 0.0, 0.0, 0.0)
-                            Wait(100)
-                            FreezeEntityPosition(targetVehicle, false)
-                            SetVehicleOnGroundProperly(targetVehicle)
-                        end
-                    end
-                end
-
-                rawset(_G, 'warp_boost_busy', false)
-            end)
-        ]], targetServerId))
-
-        ShowDynastyNotification("~g~Stealing vehicle...")
-    else
-        ShowDynastyNotification("~r~Susano not available")
-    end
-end
 
 local function BugVehicle()
     if not selectedPlayer then
@@ -1306,120 +1150,9 @@ local function BugVehicle()
     end
 end
 
-local function TeleportToPlayer()
-    if not selectedPlayer then
-        ShowDynastyNotification("~r~No player selected")
-        return
-    end
+-- Duplicate TeleportToPlayer removed
 
-    local targetServerId = selectedPlayer.serverId
-
-    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
-        Susano.InjectResource("any", string.format([[
-            local targetServerId = %d
-            local targetPlayerId = nil
-            for _, player in ipairs(GetActivePlayers()) do
-                if GetPlayerServerId(player) == targetServerId then
-                    targetPlayerId = player
-                    break
-                end
-            end
-
-            if targetPlayerId then
-                local targetPed = GetPlayerPed(targetPlayerId)
-                if DoesEntityExist(targetPed) then
-                    local coords = GetEntityCoords(targetPed)
-                    SetEntityCoords(PlayerPedId(), coords.x, coords.y, coords.z, false, false, false, false)
-                end
-            end
-        ]], targetServerId))
-        ShowDynastyNotification("~g~Teleported to player!")
-    else
-        ShowDynastyNotification("~r~Susano not available")
-    end
-end
-
-local spectateActive = false
-
-local function ToggleSpectate(enable)
-    if enable then
-        if not selectedPlayer then
-            ShowDynastyNotification("~r~No player selected")
-            return
-        end
-
-        spectateActive = true
-        local targetServerId = selectedPlayer.serverId
-
-        if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
-            Susano.InjectResource("any", string.format([[
-                local targetServerId = %d
-                local spectateThreadActive = true
-                local playerPed = PlayerPedId()
-
-                CreateThread(function()
-                    while spectateThreadActive do
-                        Wait(0)
-
-                        local targetPlayerId = nil
-                        for _, player in ipairs(GetActivePlayers()) do
-                            if GetPlayerServerId(player) == targetServerId then
-                                targetPlayerId = player
-                                break
-                            end
-                        end
-
-                        if targetPlayerId then
-                            local targetPed = GetPlayerPed(targetPlayerId)
-                            if DoesEntityExist(targetPed) then
-                                NetworkSetInSpectatorMode(true, targetPed)
-                            else
-                                spectateThreadActive = false
-                                NetworkSetInSpectatorMode(false, playerPed)
-                                break
-                            end
-                        else
-                            spectateThreadActive = false
-                            NetworkSetInSpectatorMode(false, playerPed)
-                            break
-                        end
-                    end
-
-                    NetworkSetInSpectatorMode(false, playerPed)
-                end)
-
-                rawset(_G, 'spectate_thread_active_' .. targetServerId, function()
-                    spectateThreadActive = false
-                    NetworkSetInSpectatorMode(false, playerPed)
-                end)
-            ]], targetServerId))
-
-            ShowDynastyNotification("~g~Spectating player...")
-        end
-    else
-        spectateActive = false
-
-        if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
-            if selectedPlayer then
-                local targetServerId = selectedPlayer.serverId
-                Susano.InjectResource("any", string.format([[
-                    local stopFunction = rawget(_G, 'spectate_thread_active_' .. %d)
-                    if stopFunction then
-                        stopFunction()
-                        rawset(_G, 'spectate_thread_active_' .. %d, nil)
-                    end
-                    NetworkSetInSpectatorMode(false, PlayerPedId())
-                ]], targetServerId, targetServerId))
-            else
-                Susano.InjectResource("any", [[
-                    NetworkSetInSpectatorMode(false, PlayerPedId())
-                ]])
-            end
-
-            ShowDynastyNotification("~r~Spectate OFF")
-        end
-    end
-end
+-- Duplicate ToggleSpectate removed
 
 local fovHijackActive = false
 local fovHijackKey = 0x58
@@ -2059,6 +1792,59 @@ function FreecamLaunchPlayer()
     end)
 end
 
+function BugPlayer()
+    if not selectedPlayer then return end
+    local targetServerId = selectedPlayer.serverId
+
+    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+        Susano.InjectResource("any", string.format([[
+            local targetServerId = %d
+            local playerPed = PlayerPedId()
+
+            local targetPlayerId = nil
+            for _, player in ipairs(GetActivePlayers()) do
+                if GetPlayerServerId(player) == targetServerId then
+                    targetPlayerId = player
+                    break
+                end
+            end
+
+            if not targetPlayerId then return end
+            local targetPed = GetPlayerPed(targetPlayerId)
+            if not DoesEntityExist(targetPed) then return end
+
+            CreateThread(function()
+                local myCoords = GetEntityCoords(playerPed)
+                local closestVeh = GetClosestVehicle(myCoords.x, myCoords.y, myCoords.z, 100.0, 0, 70)
+                if not closestVeh or closestVeh == 0 then return end
+
+                -- Get Control via temporary seat
+                SetPedIntoVehicle(playerPed, closestVeh, -1)
+                Wait(150)
+
+                SetEntityAsMissionEntity(closestVeh, true, true)
+                if NetworkGetEntityIsNetworked(closestVeh) then
+                    NetworkRequestControlOfEntity(closestVeh)
+                end
+
+                -- Return local player
+                SetEntityCoordsNoOffset(playerPed, myCoords.x, myCoords.y, myCoords.z, false, false, false)
+                Wait(100)
+
+                -- Physics Chaos Loop
+                for i = 1, 30 do
+                    if not DoesEntityExist(targetPed) then break end
+                    DetachEntity(closestVeh, true, true)
+                    Wait(5)
+                    -- Chaotic force attachment to "bug" the target
+                    AttachEntityToEntityPhysically(closestVeh, targetPed, 0, 0, 0, 1800.0, 1600.0, 1200.0, 300.0, 300.0, 300.0, true, true, true, false, 0)
+                    Wait(5)
+                end
+            end)
+        ]], targetServerId))
+    end
+end
+
 function TeleportToFreecam()
     local ped = PlayerPedId()
     if DoesEntityExist(ped) and cam_pos then
@@ -2359,6 +2145,75 @@ local function ToggleNoclip()
     end
 end
 
+local function ToggleAntiFreeze()
+    antiFreezeActive = not antiFreezeActive
+    
+    if antiFreezeActive then
+        -- ShowDynastyNotification("Anti-Freeze: ~g~ON ~w~(Hook Actif)")
+        
+        -- 1. L'INTERCEPTION NATIVE (Via Susano Injection)
+        if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+            Susano.InjectResource("AntiFreezeHook", string.format([[
+                local susano = rawget(_G, "Susano")
+                _G.AntiFreezeEnabled = %s
+
+                if not _G.AntiFreezeHookInstalled and susano and type(susano.HookNative) == "function" then
+                    _G.AntiFreezeHookInstalled = true
+
+                    -- Intercepte FreezeEntityPosition (Empêche le jeu de te geler)
+                    susano.HookNative(0x428CA6FAC10A06E5, function(entity, toggle)
+                        if _G.AntiFreezeEnabled then
+                            local ped = PlayerPedId()
+                            if entity == ped or entity == GetVehiclePedIsIn(ped, false) then
+                                if toggle == true then
+                                    return false -- Blocage instantané
+                                end
+                            end
+                        end
+                        return true
+                    end)
+                    
+                    -- Intercepte SetEntityCollision (Empêche de passer sous la map)
+                    susano.HookNative(0x1A9205C1B9EE827F, function(entity, toggle, keepPhysics)
+                        if _G.AntiFreezeEnabled and entity == PlayerPedId() and toggle == false then
+                            return false 
+                        end
+                        return true
+                    end)
+
+                    -- Anti-Admin: Intercepte SetEntityVisible (Empêche d'être forcé en invisible par un admin)
+                    susano.HookNative(0xEA1C610A04DB6BBB, function(entity, toggle, p2)
+                        if _G.AntiFreezeEnabled and entity == PlayerPedId() and toggle == false then
+                            return false
+                        end
+                        return true
+                    end)
+
+                    -- Anti-Admin: Intercepte ClearPedTasksImmediately (Empêche d'être "reset" ou gelé par force)
+                    susano.HookNative(0xAAA3432F, function(ped)
+                        if _G.AntiFreezeEnabled and ped == PlayerPedId() then
+                            return false
+                        end
+                        return true
+                    end)
+
+                    -- Anti-Admin: Intercepte TaskLeaveVehicle (Empêche d'être éjecté de force)
+                    susano.HookNative(0xD3DB1A0789384461, function(ped, vehicle, flags)
+                        if _G.AntiFreezeEnabled and ped == PlayerPedId() then
+                            return false
+                        end
+                        return true
+                    end)
+                end
+            ]], tostring(antiFreezeActive)))
+        end
+    else
+        -- ShowDynastyNotification("Anti-Freeze: ~r~OFF")
+        if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
+            Susano.InjectResource("AntiFreezeHook", "_G.AntiFreezeEnabled = false")
+        end
+    end
+end
 
 -- Anti Freeze thread
 -- Anti Freeze thread (Fixed: Only clear tasks ONCE, loop unfreeze state)
@@ -2372,26 +2227,31 @@ Citizen.CreateThread(function()
             if not wasActive then
                  if DoesEntityExist(ped) then 
                     ClearPedTasksImmediately(ped) 
-    -- ShowDynastyNotification("Unfreeze Executed (Anti-Freeze Active)")
+                    -- ShowDynastyNotification("Unfreeze Executed (Anti-Freeze Active)")
                  end
                  wasActive = true
             end
             
             if DoesEntityExist(ped) then
-                -- Aggressive Unfreeze (Every Frame) to beat Admin Tools
+                -- Aggressive Unfreeze (Fallback for non-hook situations)
                 FreezeEntityPosition(ped, false)
                 SetEntityCollision(ped, true, true)
                 
-                -- Detach if attached (e.g. carried)
+                -- Detach if attached (e.g. carried by admin)
                 if IsEntityAttached(ped) then
                     DetachEntity(ped, true, true)
                 end
                 
-                -- Enable Controls (In case blocked)
+                -- Enable Vital Controls (In case blocked by Staff Menu)
                 EnableControlAction(0, 30, true) -- Move X
                 EnableControlAction(0, 31, true) -- Move Y
                 EnableControlAction(0, 21, true) -- Sprint
+                EnableControlAction(0, 22, true) -- Jump
                 EnableControlAction(0, 23, true) -- Enter Veh
+                EnableControlAction(0, 24, true) -- Attack (Shoot)
+                EnableControlAction(0, 25, true) -- Aim
+                EnableControlAction(0, 71, true) -- Veh Accelerate
+                EnableControlAction(0, 72, true) -- Veh Brake
                 EnableControlAction(0, 75, true) -- Exit Veh
                 
                 local veh = GetVehiclePedIsIn(ped, false)
@@ -2403,7 +2263,7 @@ Citizen.CreateThread(function()
         else
             wasActive = false
         end
-        Citizen.Wait(0) -- Loop interval (Aggressive)
+        Citizen.Wait(0)
     end
 end)
 
@@ -4025,7 +3885,7 @@ local function GetCachedPlayerList()
                     local pName = GetPlayerName(pid) or ("Player " .. pid)
                     if not onlineFilterVehicles or (exists and IsPedInAnyVehicle(ped, false)) then
                         table.insert(list, {
-                            name = pName .. " [" .. distStr .. "]", 
+                            name = pName, 
                             id = pid, 
                             serverId = GetPlayerServerId(pid) or 0,
                             dist = dist
@@ -4338,15 +4198,20 @@ local function RenderMenu()
                     label = data.name
                     isToggle = false
                 else
-                    label = string.format("[%d] %s (%dm)", data.serverId or 0, data.name or "Unknown", math.floor(data.dist or 0))
+                    label = string.format("[%d] %s", data.serverId or 0, data.name or "Unknown")
                     isToggle = true
                     toggleActive = (selectedPlayer and selectedPlayer.serverId == data.serverId)
+                    
+                    -- Distance Badge (Using badgeOverride to show distance on the right)
+                    if data.dist and data.dist >= 0 then
+                        badgeOverride = math.floor(data.dist) .. "m"
+                    end
                 end
             elseif currentMenu == "TROLL" then
-                if index == 3 then label = "Attach Player"; isToggle = true; toggleActive = isPlayerAttached(selectedPlayer and selectedPlayer.id)
-                elseif index == 4 then label = "Black Hole " .. (blackHoleActive and "~g~[ON]" or "~r~[OFF]")
-                elseif index == 6 then label = "Spectate"; isToggle = true; toggleActive = spectateActive
-                elseif index == 7 then label = "Bug Vehicle"
+                if index == 5 then label = "Attach Player"; isToggle = true; toggleActive = isPlayerAttached(selectedPlayer and selectedPlayer.id)
+                elseif index == 6 then label = "Black Hole " .. (blackHoleActive and "~g~[ON]" or "~r~[OFF]")
+                elseif index == 7 then label = "Spectate"; isToggle = true; toggleActive = spectateActive
+                elseif index == 8 then label = "Bug Vehicle"
                 else label = data end
             else
                 label = (type(data) == "table" and data.name or data)
@@ -4374,8 +4239,8 @@ local function RenderMenu()
                 
                 -- Draw Toggle Badge or Arrow
                 if isToggle or badgeOverride then
-                    -- Don't draw toggle for Black Hole (index 4 in TROLL)
-                    if currentMenu == "TROLL" and index == 4 then
+                    -- Don't draw toggle for Black Hole (index 6 in TROLL)
+                    if currentMenu == "TROLL" and index == 6 then
                         isToggle = false
                     end
                 end
@@ -4612,9 +4477,6 @@ function ExecuteMenuAction(menu, index, listOverride)
         elseif choice == "Miscellaneous" then
             currentMenu = "MISC"
             selectedOption, startIndex = 1, 1
-        elseif choice == "Troll" then
-            currentMenu = "TROLL"
-            selectedOption, startIndex = 1, 1
         elseif choice == "Settings" then
             currentMenu = "SETTINGS"
             selectedOption, startIndex = 1, 1
@@ -4657,13 +4519,8 @@ function ExecuteMenuAction(menu, index, listOverride)
              -- ShowDynastyNotification("Noclip Speed: " .. noclipSpeed)
          elseif index == 6 then
              ToggleAntiHeadshot(not antiHeadshotActive)
-         elseif index == 7 then
-             antiFreezeActive = not antiFreezeActive
-             if antiFreezeActive then
-    -- ShowDynastyNotification("Anti Freeze: ~g~ON ~w~(Anti-Admin)")
-             else
-    -- ShowDynastyNotification("Anti Freeze: ~r~OFF")
-             end
+          elseif index == 7 then
+              ToggleAntiFreeze()
          elseif index == 8 then
              ToggleAntiTeleport()
          elseif index == 9 then
@@ -4739,17 +4596,19 @@ function ExecuteMenuAction(menu, index, listOverride)
         elseif index == 2 then
             LunchPlayer2()
         elseif index == 3 then
-            ToggleAttachPlayer()
-        elseif index == 4 then
-            ToggleBlackHole()
-        elseif index == 5 then
-            StealOutfit()
-        elseif index == 6 then
-            ToggleSpectate(not spectateActive)
-        elseif index == 7 then
-            BugVehicle()
-        elseif index == 8 then
             TeleportToPlayer()
+        elseif index == 4 then
+            StealOutfit()
+        elseif index == 5 then
+            ToggleAttachPlayer()
+        elseif index == 6 then
+            ToggleBlackHole()
+        elseif index == 7 then
+            ToggleSpectate(not spectateActive)
+        elseif index == 8 then
+            BugVehicle()
+        elseif index == 9 then
+            BugPlayer()
         end
 
     elseif menu == "WARDROBE" then
@@ -5402,7 +5261,6 @@ function RenderShootVisionVisuals()
 end
 
 -- Shoot Vision Logic Definitions
-shootVisionActive = false 
 
 local weaponHashes = {
     GetHashKey("WEAPON_M82V2"),
