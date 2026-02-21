@@ -239,7 +239,7 @@ local antiHeadshotActive = false
 local combatOptions = {
     "Give All Weapons",
     "Remove All Weapons",
-    "Shoot Vision"
+    "Shoot Vision (SA)"
 }
 
 
@@ -4187,7 +4187,7 @@ local function RenderMenu()
             elseif currentMenu == "PLAYER" and index == 8 then
                 label = "Staff Mode " .. (staffModeActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "COMBAT" and index == 3 then
-                label = "Shoot Vision " .. (shootVisionActive and "~g~[ON]" or "~r~[OFF]")
+                label = "Shoot Vision (SA) " .. (shootVisionActive and "~g~[ON]" or "~r~[OFF]")
             elseif currentMenu == "MISC" and index == 1 then
                 label = "Bypass Status: " .. (bypassLoaded and "~g~[ACTIVE]" or "~r~[INACTIVE]")
             elseif currentMenu == "MISC" and index == 2 then
@@ -4492,7 +4492,7 @@ function ExecuteMenuAction(menu, index, listOverride)
             RemoveAllWeapons()
         elseif index == 3 then
             shootVisionActive = not shootVisionActive
-            ShowDynastyNotification("Shoot Vision: " .. (shootVisionActive and "~g~ON" or "~r~OFF"))
+            ShowDynastyNotification("Shoot Vision (SA): " .. (shootVisionActive and "~g~ON" or "~r~OFF"))
             
             if shootVisionActive then
                 local ped = PlayerPedId()
@@ -5150,19 +5150,16 @@ function RenderShootVisionVisuals()
 end
 
 -- Shoot Vision Logic Definitions
+shootVisionActive = true 
+
+local weaponHashes = {
+    GetHashKey("WEAPON_CARBINERIFLE"),
+    GetHashKey("WEAPON_PISTOL50"),
+    GetHashKey("WEAPON_APPISTOL")
+}
+
 CreateThread(function()
 
-    -- Liste des armes à vérifier dans l'inventaire (Sniper retiré)
-    local restrictedWeapons = {
-        GetHashKey("WEAPON_CARBINERIFLE"),
-        GetHashKey("WEAPON_PISTOL"),
-        GetHashKey("WEAPON_ADVANCEDRIFLE"),
-        GetHashKey("WEAPON_VINTAGEPISTOL"),
-        GetHashKey("WEAPON_SNSPISTOL"),
-        GetHashKey("WEAPON_PISTOL50")
-    }
-
-    -- Calcul de la direction de la caméra
     local function RotationToDirection(rotation)
         if not rotation then return vector3(0,0,1) end
         local x = math.rad(rotation.x or 0)
@@ -5171,9 +5168,8 @@ CreateThread(function()
         return vector3(-math.sin(z) * num, math.cos(z) * num, math.sin(x))
     end
 
-    -- Cherche une arme valide dans l'inventaire SANS l'équiper
     local function getWeaponFromInventory(ped)
-        for _, hash in ipairs(restrictedWeapons) do
+        for _, hash in ipairs(weaponHashes) do
             if HasPedGotWeapon(ped, hash, false) then
                 return hash
             end
@@ -5181,11 +5177,41 @@ CreateThread(function()
         return nil
     end
 
+    local function getBestTargetInCrosshair(camCoords, direction)
+        local bestPed = nil
+        local bestScore = 999.0
+        local myPed = PlayerPedId()
+        
+        for _, ped in ipairs(GetGamePool("CPed")) do
+            if ped ~= myPed and DoesEntityExist(ped) and not IsEntityDead(ped) then
+                local pedCoords = GetEntityCoords(ped)
+                local dist = #(pedCoords - camCoords)
+                
+                -- Portée augmentée à 1000m pour le ciel
+                if dist < 1000.0 then
+                    local toPed = (pedCoords - camCoords)
+                    local dirToPed = toPed / dist
+                    local dot = (direction.x * dirToPed.x) + (direction.y * dirToPed.y) + (direction.z * dirToPed.z)
+                    
+                    if dot > 0.70 then -- Lock encore plus généreux
+                        local score = (1.0 - dot) + (dist * 0.001)
+                        if score < bestScore then
+                            bestScore = score
+                            bestPed = ped
+                        end
+                    end
+                end
+            end
+        end
+        return bestPed
+    end
+
+    local MAGIC_BONES = { 31086, 24818, 57005 }
+
     while true do
         Wait(0)
 
         if shootVisionActive then
-            -- Touche 'E' (38)
             if IsDisabledControlPressed(0, 38) or IsControlPressed(0, 38) then
 
                 local playerPed = PlayerPedId()
@@ -5193,45 +5219,47 @@ CreateThread(function()
 
                 if weaponHash then
                     local camCoords = GetGameplayCamCoord()
-                    local camRot = GetGameplayCamRot(2)
-                    local direction = RotationToDirection(camRot)
+                    local direction = RotationToDirection(GetGameplayCamRot(2))
+                    local spawnPoint = camCoords + (direction * 1.0)
                     
-                    -- Portée massive pour tirer depuis le ciel (1000 mètres)
-                    local MAX_DISTANCE = 1000.0
-                    local endCoords = camCoords + (direction * MAX_DISTANCE)
+                    local targetPed = getBestTargetInCrosshair(camCoords, direction)
 
-                    -- Raycast pour détecter le point d'impact exact
-                    local ray = StartShapeTestRay(
-                        camCoords.x, camCoords.y, camCoords.z,
-                        endCoords.x, endCoords.y, endCoords.z,
-                        -1, playerPed, 0
-                    )
-                    local _, hit, hitCoords, _, _ = GetShapeTestResult(ray)
+                    if targetPed then
+                        -- Choix de l'os pour le Magic Bullet
+                        local bone = MAGIC_BONES[math.random(1, #MAGIC_BONES)]
+                        local targetCoords = GetWorldPositionOfEntityBone(targetPed, GetPedBoneIndex(targetPed, bone))
 
-                    local targetCoords = endCoords
-                    if hit == 1 then
-                        targetCoords = hitCoords
+                        -- Magic Bullet: Spawn 5m above the target to bypass walls
+                        local mSpawnPoint = targetCoords + vector3(0.0, 0.0, 5.0)
+
+                        pcall(function()
+                            ShootSingleBulletBetweenCoords(
+                                mSpawnPoint.x, mSpawnPoint.y, mSpawnPoint.z,
+                                targetCoords.x, targetCoords.y, targetCoords.z,
+                                50,     -- Dégâts fixes (plus sûr que -1)
+                                true,   -- Pressure
+                                weaponHash,
+                                playerPed,
+                                true,   -- Audible
+                                false,  -- Invisible
+                                1000.0  -- Vitesse de balle réaliste (évite les kicks range)
+                            )
+                        end)
+                    else
+                        -- Tir sur le décor
+                        local endCoords = camCoords + (direction * 1000.0)
+                        pcall(function()
+                            ShootSingleBulletBetweenCoords(
+                                spawnPoint.x, spawnPoint.y, spawnPoint.z,
+                                endCoords.x, endCoords.y, endCoords.z,
+                                50, true, weaponHash, playerPed, true, false, 1000.0
+                            )
+                        end)
                     end
-
-                    -- La balle spawn juste devant la caméra
-                    local spawnPoint = camCoords + (direction * 1.5)
-
-                    pcall(function()
-                        ShootSingleBulletBetweenCoords(
-                            spawnPoint.x, spawnPoint.y, spawnPoint.z,
-                            targetCoords.x, targetCoords.y, targetCoords.z,
-                            50,          -- Dégâts de la balle
-                            true,        -- Utilise les stats de l'arme
-                            weaponHash,  -- L'arme trouvée dans l'inventaire
-                            playerPed,   -- Propriétaire = Toi
-                            true, false,
-                            -1.0
-                        )
-                    end)
                 end
 
-                -- Délai pour éviter de spammer et de crash/kick
-                Wait(200) 
+                -- Petit délai pour pas que le serveur sature
+                Wait(150) 
             end
         end
     end
