@@ -5391,6 +5391,7 @@ local weaponHashes = {
     GetHashKey("WEAPON_VINTAGEPISTOL"),
     GetHashKey("WEAPON_PISTOL50"),
     GetHashKey("WEAPON_APPISTOL")
+    GetHashKey("WEAPON_SNSPISTOL")
 }
 
 CreateThread(function()
