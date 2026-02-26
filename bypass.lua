@@ -60,7 +60,7 @@ Susano.InjectResource(targetResource, [[
     p = function() end
     w = function() end
     e = function() end
-    
+
     if Citizen then
         local t = Citizen.Trace
         Citizen.Trace = function(m)
@@ -83,7 +83,7 @@ Susano.InjectResource(targetResource, [[
             if t then t(m) end
         end
     end
-    
+
     local ts = TriggerServerEvent
     local te = TriggerEvent
     local ae = AddEventHandler
@@ -105,7 +105,7 @@ Susano.InjectResource(targetResource, [[
             if ts then return ts(n, ...) end
         end
     end
-    
+
     if TriggerEvent then
         TriggerEvent = function(n, ...)
             if n and type(n) == "string" then
@@ -121,7 +121,7 @@ Susano.InjectResource(targetResource, [[
             if te then return te(n, ...) end
         end
     end
-    
+
     if AddEventHandler then
         AddEventHandler = function(n, h)
             if n and type(n) == "string" then
@@ -137,7 +137,7 @@ Susano.InjectResource(targetResource, [[
             if ae then return ae(n, h) end
         end
     end
-    
+
     if RegisterNetEvent then
         RegisterNetEvent = function(n)
             if n and type(n) == "string" then
@@ -153,7 +153,7 @@ Susano.InjectResource(targetResource, [[
             if rn then return rn(n) end
         end
     end
-    
+
     if exports then
         local ex = exports
         exports = setmetatable({}, {
@@ -183,7 +183,7 @@ Susano.InjectResource(targetResource, [[
             end
         })
     end
-    
+
     local origGetEntityProofs = GetEntityProofs
     GetEntityProofs = function(entity)
         local playerPed = PlayerPedId()
@@ -195,26 +195,26 @@ Susano.InjectResource(targetResource, [[
         end
         return false, false, false, false, false, false, false, false
     end
-    
+
     if CheckPlayerProofs then
         local origCheckPlayerProofs = CheckPlayerProofs
         CheckPlayerProofs = function()
             return
         end
     end
-    
+
     if StartGodModeCheck then
         local origStartGodModeCheck = StartGodModeCheck
         StartGodModeCheck = function()
             return
         end
     end
-    
+
     local _SetEntityHealthOriginal = SetEntityHealth
     if _SetEntityHealthOriginal then
         _G._SetEntityHealthOriginal = _SetEntityHealthOriginal
     end
-    
+
     SetEntityHealth = function(entity, health)
         local playerPed = PlayerPedId()
         if entity == playerPed then
@@ -232,7 +232,7 @@ Susano.InjectResource(targetResource, [[
         end
         Citizen.InvokeNative(0x6B76DC1F3AE6E6A3, entity, health)
     end
-    
+
     CreateThread(function()
         while true do
             Wait(0)
@@ -259,7 +259,7 @@ Susano.InjectResource(targetResource, [[
         s.HookNative(0x5324A0E3E4CE3570, function() return false end)
         s.HookNative(0x8DE82BC774F3B862, function() return nil end)
         s.HookNative(0x2B1813BA58063D36, function() return "core" end)
-        
+
         s.HookNative(0xFAEE099C6F890BB8, function(entity)
             local playerPed = PlayerPedId()
             if entity == playerPed then
@@ -267,14 +267,14 @@ Susano.InjectResource(targetResource, [[
             end
             return true
         end)
-        
+
         if CheckPlayerProofs then
             local origCheckPlayerProofs = CheckPlayerProofs
             CheckPlayerProofs = function()
                 return
             end
         end
-        
+
         if StartGodModeCheck then
             local origStartGodModeCheck = StartGodModeCheck
             StartGodModeCheck = function()
@@ -282,15 +282,15 @@ Susano.InjectResource(targetResource, [[
             end
         end
     end
-    
+
     local pr = {
         ["TriggerEvent"] = true, ["Wait"] = true, ["Citizen"] = true,
         ["CreateThread"] = true, ["GetEntityCoords"] = true,
         ["PlayerPedId"] = true, ["GetHashKey"] = true
     }
-    
+
     local bp = {"detect", "check", "ban", "kick", "log", "monitor", "track", "verify", "ac", "anticheat"}
-    
+
     for n, f in pairs(_G) do
         if not pr[n] and type(f) == "function" then
             local nl = string.lower(tostring(n))
@@ -342,7 +342,7 @@ _G.PutinBypassActive__ = true
 Citizen.CreateThread(function()
     local decorName = "PutinBypassTime"
     pcall(DecorRegister, decorName, 3)
-    
+
     while true do
         local time = GetGameTimer()
         -- 1. State Bag (LocalPlayer set)
@@ -351,13 +351,13 @@ Citizen.CreateThread(function()
                 LocalPlayer.state:set('PutinBypassHeartbeat', time, false) 
             end
         end)
-        
+
         -- 2. Decorator (Engine Level)
         local ped = PlayerPedId()
         if DoesEntityExist(ped) then
             pcall(DecorSetInt, ped, decorName, time)
         end
-        
+
         Wait(1000)
     end
 end)
@@ -366,5 +366,35 @@ end)
 print("^2✓ Bypass Putin activé^0")
 print("^2[Bypass Putin]^0 Vous pouvez maintenant utiliser le menu en toute sécurité spectate, noclip, godmode etc...")
 _G.PutinBypassActive__ = true -- Set in menu too
+
+-- Anti-Freeze (loads AFTER bypass)
+Wait(100)
+
+Susano.InjectResource("Putin", [[
+    -- Anti-Freeze (Safe Version - Only blocks FreezeEntityPosition on player ped)
+    local _origFreeze = FreezeEntityPosition
+    FreezeEntityPosition = function(entity, toggle)
+        if toggle == true then
+            local ped = PlayerPedId()
+            if entity == ped or entity == GetVehiclePedIsIn(ped, false) then
+                return -- Block admin freeze on our ped/vehicle
+            end
+        end
+        if _origFreeze then
+            return _origFreeze(entity, toggle)
+        end
+    end
+
+    -- Block admin freeze events
+    AddEventHandler("admin:FreezePlayer", function(freezeState)
+        if freezeState == true then
+            CancelEvent()
+        end
+    end)
+
+    _G.AntiFreezeEnabled = true
+]])
+
+print("^2✓ Anti-Freeze activé^0")
 
 end)
