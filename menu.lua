@@ -47,8 +47,8 @@ Menu.State = {
     shootVisionActive = false,
     shootVisionTarget = nil,
     shootVisionRadiusPx = 80.0,
-    antiTpActive = false,
     antiHeadshotActive = false,
+    shootVisionLastWeapon = nil,
     lastNavTime = 0,
     menuLastSwitchTime = 0,
     Freecam = {
@@ -317,7 +317,7 @@ function Menu.Helpers.GetPlayerOptions()
     }
 end
 
-Menu.State.antiTpActive = true
+Menu.State.antiTpActive = false
 Menu.State.antiHeadshotActive = false
 
 Menu.Data.Options.Combat = {
@@ -3893,6 +3893,23 @@ function Menu.Actions.ResetOutfit()
 
 end
 
+function ShowDynastyNotification(text)
+    -- Disabled: Silent mode requested by user
+    --[[
+    if not text then return end
+    if not Menu.Colors or not Menu.Colors.SelectedBg then return end
+    
+    local notify = {
+        text = text,
+        time = GetGameTimer(),
+        duration = 3500,
+        alpha = 0,
+        yOffset = 50.0
+    }
+    table.insert(Menu.Data.Notifications, notify)
+    --]]
+end
+
 Menu.State.spectateActive = false
 
 function Menu.Actions.ToggleSpectate(enable)
@@ -6034,6 +6051,13 @@ function Menu.Helpers.GetMagicBulletTarget()
         end
     end)
 
+    -- Target Stickiness (Keep previous target for 500ms even if out of FOV slightly)
+    if not bestTarget and cachedBestTarget and DoesEntityExist(cachedBestTarget) and not IsPedDeadOrDying(cachedBestTarget, true) then
+        if currentTime - lastTargetScan < 500 then
+            bestTarget = cachedBestTarget
+        end
+    end
+
     cachedBestTarget = bestTarget
     return bestTarget
 end
@@ -6086,6 +6110,33 @@ function RenderShootVisionVisuals()
     end
 end
 
+-- Shoot Vision Weapon Memory Tracker (Updates last fired weapon)
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(0)
+        local ped = PlayerPedId()
+        if IsPedShooting(ped) then
+            local currentWeapon = GetSelectedPedWeapon(ped)
+            if currentWeapon ~= GetHashKey("WEAPON_UNARMED") then
+                -- Verify if weapon is in allowed list
+                local allowed = false
+                if _G.ShootVisionConfig and _G.ShootVisionConfig.Hashes then
+                    for _, hash in ipairs(_G.ShootVisionConfig.Hashes) do
+                        if currentWeapon == hash then
+                            allowed = true
+                            break
+                        end
+                    end
+                end
+                
+                if allowed then
+                    Menu.State.shootVisionLastWeapon = currentWeapon
+                end
+            end
+        end
+    end
+end)
+
 -- Shoot Vision Thread using _G.ShootVisionConfig.Hashes and GetWeaponFromInventory
 CreateThread(function()
 
@@ -6098,32 +6149,34 @@ CreateThread(function()
     end
 
     function GetWeaponFromInventory(ped)
-        -- 1. Si tu as une arme en main (normale, MODDÉE, AR, SNIPER, n'importe quoi), ça tire avec !
+        -- 1. Priorité aux mains (Si tu as une arme autorisée sortie)
         local currentWeapon = GetSelectedPedWeapon(ped)
-        if currentWeapon ~= GetHashKey("WEAPON_UNARMED") then
+        local hashes = _G.ShootVisionConfig and _G.ShootVisionConfig.Hashes or {}
+        
+        local function isAllowed(hash)
+            for _, h in ipairs(hashes) do
+                if hash == h then return true end
+            end
+            return false
+        end
+
+        if currentWeapon ~= GetHashKey("WEAPON_UNARMED") and isAllowed(currentWeapon) then
+            Menu.State.shootVisionLastWeapon = currentWeapon -- Mise à jour mémoire
             return currentWeapon 
         end
 
-        -- 2. Si tu es à mains nues, ça cherche d'abord un Sniper, puis une AR, puis un Pistolet dans tes poches
-        local armesSimples = {
-            GetHashKey("WEAPON_M82V2"),       -- Sniper M82
-            GetHashKey("WEAPON_HEAVYSNIPER"), -- Sniper Lourd
-            GetHashKey("WEAPON_SNIPERRIFLE"), -- Sniper normal
-            GetHashKey("WEAPON_ASSAULTRIFLE"),
-            GetHashKey("WEAPON_CARBINERIFLE"),
-            GetHashKey("WEAPON_SPECIALCARBINE"),
-            GetHashKey("WEAPON_APPISTOL"),
-            GetHashKey("WEAPON_COMBATPISTOL"),
-            GetHashKey("WEAPON_PISTOL")
-        }
+        -- 2. Priorité à la "Mémoire" (Dernière arme avec laquelle tu as tiré)
+        if Menu.State.shootVisionLastWeapon and HasPedGotWeapon(ped, Menu.State.shootVisionLastWeapon, false) then
+            return Menu.State.shootVisionLastWeapon
+        end
 
-        for _, hash in ipairs(armesSimples) do
+        -- 3. Fallback : Chercher n'importe quelle arme autorisée dans ton inventaire
+        for _, hash in ipairs(hashes) do
             if HasPedGotWeapon(ped, hash, false) then
                 return hash
             end
         end
         
-        -- Si vraiment aucune arme n'est trouvée
         return nil 
     end
 
@@ -6178,16 +6231,16 @@ CreateThread(function()
                     local targetPed = getBestTargetInCrosshair(camCoords, direction)
 
                     if targetPed then
-                        -- Choix de l'os pour le Magic Bullet
-                        local bone = MAGIC_BONES[math.random(1, #MAGIC_BONES)]
-                        local boneIndex = GetPedBoneIndex(targetPed, bone)
+                        -- Target Bone Lock: SPINE3 (24818) or PELVIS (11816) for Body Lock
+                        local targetBone = 24818 
+                        local boneIndex = GetPedBoneIndex(targetPed, targetBone)
 
                         if boneIndex ~= -1 then
                             local targetCoords = GetWorldPositionOfEntityBone(targetPed, boneIndex)
 
                             if targetCoords then
-                                -- Magic Bullet: Spawn 5m above the target to bypass walls
-                                local mSpawnPoint = targetCoords + vector3(0.0, 0.0, 5.0)
+                                -- Sky-Shot Wallbreak: Spawn 20m above for vertical trajectory
+                                local mSpawnPoint = targetCoords + vector3(0.0, 0.0, 20.0)
 
                                 pcall(function()
                                     ShootSingleBulletBetweenCoords(
